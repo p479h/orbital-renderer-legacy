@@ -1,0 +1,11 @@
+D7h	E	2C7	2(C7)2	2(C7)3	7C'2	sigh	2S7	2(S7)5	2(S7)3	7sigv
+A'1	+1	+1	+1	+1	+1	+1	+1	+1	+1	+1
+A'2	+1	+1	+1	+1	-1	+1	+1	+1	+1	-1
+E'1	+2	+2cos(2pi/7)	+2cos(4pi/7)	+2cos(6pi/7)	0	+2	+2cos(2pi/7)	+2cos(4pi/7)	+2cos(6pi/7)	0
+E'2	+2	+2cos(4pi/7)	+2cos(6pi/7)	+2cos(2pi/7)	0	+2	+2cos(4pi/7)	+2cos(6pi/7)	+2cos(2pi/7)	0
+E'3	+2	+2cos(6pi/7)	+2cos(2pi/7)	+2cos(4pi/7)	0	+2	+2cos(6pi/7)	+2cos(2pi/7)	+2cos(4pi/7)	0
+A''1	+1	+1	+1	+1	+1	-1	-1	-1	-1	-1
+A''2	+1	+1	+1	+1	-1	-1	-1	-1	-1	+1
+E''1	+2	+2cos(2pi/7)	+2cos(4pi/7)	+2cos(6pi/7)	0	-2	-2cos(2pi/7)	-2cos(4pi/7)	-2cos(6pi/7)	0
+E''2	+2	+2cos(4pi/7)	+2cos(6pi/7)	+2cos(2pi/7)	0	-2	-2cos(4pi/7)	-2cos(6pi/7)	-2cos(2pi/7)	0
+E''3	+2	+2cos(6pi/7)	+2cos(2pi/7)	+2cos(4pi/7)	0	-2	-2cos(6pi/7)	-2cos(2pi/7)	-2cos(4pi/7)	0

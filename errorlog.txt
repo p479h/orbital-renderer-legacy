@@ -1,0 +1,41 @@
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\E
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Missing conjugacy class:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C3
+
+
+Problems in the following directory:
+C:\Users\phfer\Desktop\Animation_Tue\orbital-renderer\Animation_files_benzene\2C6(z)\2C6(z)_1
+Should have had 268 but had 267

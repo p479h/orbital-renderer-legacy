@@ -1,0 +1,29 @@
+111-trichloroethane C3v
+Adamantane Td
+Ammonia C3v
+B12H12_ion Ih
+B6H6_ion Oh
+Benzene D6h
+BH_3 D3h
+Borazine D3h
+Cubane Oh
+Cubylcubane D3d
+Cyclooctatetraene_dianion D8h
+Cyclopentadienyl anion D5h
+Dodecaetheleneoctamine O
+Dodecahedrane Ih
+Ferrocene D5h
+Fullerene Ih
+Methane Td
+Mg(H_2O)_6 Th
+Neopentane Td
+Octamethylsilsesquioxane O
+Octamethylsilsesquioxane Oh
+oxalic_acid C2h
+Pb12_ion Ih
+Sulflower D8h
+sulfur_hexafluoride Oh
+Triphenylene D3h
+Tungsten hexacarbonyl Oh
+Uranocene D8h
+H_2O C2v
