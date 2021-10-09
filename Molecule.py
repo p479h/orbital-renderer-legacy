@@ -526,10 +526,10 @@ class Molecule(Atom):
 
     #Now onto the rendering part
     def getBondRadius(self, rad):
-        r = rad.mean()/2;
-        if any(r > rad*.8):
-            r = rad.mean()/3;
-        return rad.mean()/2;
+        r = rad.mean()/2.3;
+        if any(r > rad):
+            r = min(rad);
+        return r;
 
     @classmethod
     def read_mol(cls, path, first_index = 0):
@@ -658,7 +658,7 @@ class Molecule(Atom):
             p0, p1 = self.position[i0, :], self.position[i1, :];
             m0, m1 = self.material[i0], self.material[i1];
             r0, r1 = rad[i0], rad[i1];
-            r = self.getBondRadius(rad);
+            r = self.getBondRadius(rad[np.array([i0, i1])]);
             if stick:
                 r =  r**.5/10 + .02
             p1p0 = (p1-p0)/np.linalg.norm(p1-p0);
