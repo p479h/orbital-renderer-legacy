@@ -301,7 +301,8 @@ class Molecule(Atom):
         This class unites many atoms, allowing them to bond and be rendered together
         Here each atom becomes associated to an index in the arrays with info about the molecule"""
 
-    def __init__(self, atoms, radius_factor = 1,connections = None, name = None, prettify_radii = True, collection = None):
+    def __init__(self, atoms, radius_factor = 1,connections = None, name = None,
+                 prettify_radii = True, collection = None, orders = []):
         super().__init__();
         self.prettify_radii = prettify_radii; #If turned off, the actuall atomic radii will be used
         self.position = self.get_positions(atoms); #Note how we use the same property name for Atoms and Molecule. This is because then we can rely on the "setters" already defined in Atoms.
@@ -311,6 +312,10 @@ class Molecule(Atom):
         self.name = self.set_molecule_name(name); #Name of the molecule
         self.connections = connections; # Bond indices
         self.meshes = []; #All of this molecules meshes
+        self.atomMeshes = [];
+        self.cylinderMeshes = [];
+        self.cylinderRadii = [];
+        self.bondOrder = orders; #The order of the bonds!
         self.mules = []; #Used for the animations
         self.current_frame = 0;
         self.pause = 20; #These three are timers for the animations and can easily be integrated into the json file.
@@ -329,14 +334,70 @@ class Molecule(Atom):
 
     def unlink_obj(self, obj):
         for collection in bpy.data.collections:
-                try:
-                    bpy.context.scene.collection.objects.unlink(obj);
-                except:
-                    None; #Sometimes an object is not part of a collection, which would throw an error.
+            try:
+                bpy.context.scene.collection.objects.unlink(obj);
+            except:
+                None; #Sometimes an object is not part of a collection, which would throw an error.
                     
     def link_obj(self, obj, collection):
         collection.objects.link(obj);
+
+
+    def find_normal_from_points(self, center, corners):
+        """
+            Center 1x3 array with the coordinates of the center of the figure
+            corners nx3 array with the coordinates of the edges of the figure
+            returns 1x3 array with "average" normal.
+            Note this can only be used if there is more than 1 corner!!!!
+            """
+        r = (center - corners)/np.linalg.norm(center-corners, keepdims = True, axis = 1);
+        normals = np.array([np.cross(r[0], r[i]) for i in range(1, len(r))]);
+        dots = np.array([np.dot(normals[0], n) for n in normals]);
+        normals[dots<0]*=-1; #Invert antiparallel.
+        avg_norm = np.sum(normals, axis = 0)/np.sqrt(len(normals))
+        return avg_norm
+        
+
+    def make_double_bond(self, bond_index, atom_pair_indices, neighbour_indices = []):
+        """
+            bond_index: int with the index of the single bond which is to be doubled
+            atom_pair_indices: list (0,2) int indices of atoms which form the bond
+            neighbour_indices: list (0,N) int indices of 1st gen neighbouts to atom_pair_indices
+            """
+        c = self.cylinderMeshes[bond_index];
+        cmat = np.array(c.matrix_world);
+        cmat[:3, :3] = cmat[:3, :3]@(np.eye(3)*[[.4],[.4],[1]]);
+        rad = self.cylinderRadii[bond_index];
+        d = rad/1.9
+        if len(neighbour_indices) < 2:
+            r = np.array(cmat[:3, 0]);
+            r = r/np.linalg.norm(r);
             
+        else:
+            r_center = np.mean(self.position[atom_pair_indices, :], axis = 0)
+            r_neighbours = self.position[neighbour_indices, :]
+            normal = self.find_normal_from_points(r_center, r_neighbours)
+            r = np.array(cmat[:3, 2]);
+            r = r/np.linalg.norm(r);
+            r = np.cross(normal, r); #Now we have a vector that points perpendicular to the bonding axis!
+
+        c.matrix_world = mathutils.Matrix.Translation(r*d)@mathutils.Matrix(cmat);
+        c_copy = c.copy();
+        c_copy.matrix_world = mathutils.Matrix.Translation(-r*d)@mathutils.Matrix(cmat);
+        self.link_obj(c_copy, self.collection)
+        self.deselect_all()
+        self.select([c, c_copy])
+        self.set_active(c)
+        bpy.ops.object.join();#The double bond now occupies the same slot as the former single bond.
+
+            
+    def find_neighbours(self, pair):
+        connections = np.array(self.connections)
+        contains_first = {*connections[np.any(pair[0] == connections, axis = 1), :].flatten()}
+        contains_second = {*connections[np.any(pair[1] == connections, axis = 1), :].flatten()}
+        return np.array(list({*contains_first, *contains_second}-{*pair}))
+
+        
     def make_collection(self, name):
         if not name:
             name = self.name
@@ -562,6 +623,7 @@ class Molecule(Atom):
         atoms = []
         coordinates = []
         bonds = []
+        orders = []
         with open(path, "r") as f:
             line1 = f.readline()
             n_atoms = int(line1[:3])
@@ -573,14 +635,15 @@ class Molecule(Atom):
                     atoms.append(l[0])
                     coordinates.append([float(num) for num in l[1:]])
                 else:
-                    bonds.append([int(l[:3]), int(l[3:])])
-        return atoms, coordinates, bonds
+                    bonds.append([int(l[:3]), int(l[3:6])])
+                    orders.append([int(l[6:])])
+        return atoms, coordinates, bonds, orders
             
     @classmethod
     def from_mol_file(cls, path, first_index = 0, *args, **kwargs):
-        a, c, b = cls.read_mol(path, first_index)
+        a, c, b, o = cls.read_mol(path, first_index)
         atoms = [Atom(position = coord, name = name) for coord, name in zip(c, a)];
-        return cls(atoms, connections = b, *args, **kwargs);
+        return cls(atoms, connections = b, orders = o, *args, **kwargs);
 
     @classmethod
     def from_file(cls, path, *args, **kwargs):
@@ -667,7 +730,8 @@ class Molecule(Atom):
         if type(self.connections) == type(None):
             return;
 
-        self.cylinderMeshes = [];
+        #self.cylinderMeshes = [];
+        #self.cylinderRadii = [];
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius);
         else:
@@ -698,6 +762,7 @@ class Molecule(Atom):
                 self.smooth_obj(c0, modifier = False);
                 c0.data.use_auto_smooth = True;
                 c0.active_material = m0;
+            self.cylinderRadii.append(r);
             obj = bpy.context.active_object;
             self.cylinderMeshes.append(obj);
             self.meshes.append(obj);
