@@ -301,14 +301,14 @@ class Molecule(Atom):
         This class unites many atoms, allowing them to bond and be rendered together
         Here each atom becomes associated to an index in the arrays with info about the molecule"""
 
-    def __init__(self, atoms, radius_factor = 1,connections = None, name = None, prettify_radii = True):
+    def __init__(self, atoms, radius_factor = 1,connections = None, name = None, prettify_radii = True, collection = None):
         super().__init__();
         self.prettify_radii = prettify_radii; #If turned off, the actuall atomic radii will be used
         self.position = self.get_positions(atoms); #Note how we use the same property name for Atoms and Molecule. This is because then we can rely on the "setters" already defined in Atoms.
         self.radius = self.get_radii(atoms)*radius_factor;
         self.material = self.get_materials(atoms);
-        self.name = self.set_name(name);
         self.names = self.set_names(atoms); #names of all atoms in the same order as positions.
+        self.name = self.set_molecule_name(name); #Name of the molecule
         self.connections = connections; # Bond indices
         self.meshes = []; #All of this molecules meshes
         self.mules = []; #Used for the animations
@@ -316,6 +316,7 @@ class Molecule(Atom):
         self.pause = 20; #These three are timers for the animations and can easily be integrated into the json file.
         self.transition = 59;#It would be concise to make this a class property. But I am not sure yet.
         self.short_pause = 1;
+        self.collection = self.make_collection(collection);
         self.orbital_indices = np.array([0 for i in range(len(self.position))]).astype(bool);
         self.orbital_meshes = [None for i in range(len(self.position))]; #Meshes of molecular orbitals
         self.orbital_matrices = np.tile(np.eye(4), (len(self.position), 1, 1)); #Matrices of molecular orbitals
@@ -324,7 +325,26 @@ class Molecule(Atom):
         try:
             self.mule = self.make_empty()
         except:
-            None#Only works from inside blender
+            None#Only works from inside blender, even though this class can be used outside
+
+    def unlink_obj(self, obj):
+        for collection in bpy.data.collections:
+                try:
+                    bpy.context.scene.collection.objects.unlink(obj);
+                except:
+                    None; #Sometimes an object is not part of a collection, which would throw an error.
+                    
+    def link_obj(self, obj, collection):
+        collection.objects.link(obj);
+            
+    def make_collection(self, name):
+        if not name:
+            name = self.name
+        if not bpy.data.collections.get(name):
+            bpy.data.collections.new(name  = name)
+            bpy.context.scene.collection.children.link(bpy.data.collections[name])
+        return bpy.context.scene.collection.children.get(name);
+        
 
     def copy_material(self, obj):
         """
@@ -451,7 +471,7 @@ class Molecule(Atom):
         new_mesh.from_pydata((verts*scale+offset).tolist(), [], faces.tolist());
         new_mesh.update()
         new_object = bpy.data.objects.new('Orbital', new_mesh)
-        bpy.data.collections.get("Orbitals").objects.link(new_object)
+        self.collection.objects.link(new_object)
         new_object.select_set(True)
         bpy.context.view_layer.objects.active = new_object
         bpy.ops.object.shade_smooth()
@@ -487,6 +507,13 @@ class Molecule(Atom):
     def set_names(self, atoms):
         self.names = [a.name for a in atoms];
         return self.names;
+    
+    def set_molecule_name(self, name):
+        if name:
+            self.name = name;
+            return name;
+        self.name = "".join(self.names);
+        return self.name;
 
     def select(self, objs):
         [obj.select_set(True) for obj in objs];
@@ -626,15 +653,8 @@ class Molecule(Atom):
                 self.smooth_obj(obj, modifier = True);
             self.atomMeshes.append(obj);
             self.meshes.append(obj);
-            for collection in bpy.data.collections:
-                try:
-                    bpy.context.scene.collection.objects.unlink(obj);
-                except:
-                    None
-            try:
-                bpy.data.collections.get("Bonds").objects.link(obj);
-            except:
-                None;
+            self.unlink_obj(obj);
+            self.link_obj(obj, self.collection);
         return self.meshes
             
     def get_smaller_radii(self, radius, s = 0.70):
@@ -678,30 +698,12 @@ class Molecule(Atom):
                 self.smooth_obj(c0, modifier = False);
                 c0.data.use_auto_smooth = True;
                 c0.active_material = m0;
-            self.cylinderMeshes.append(bpy.context.active_object);
-            self.meshes.append(bpy.context.active_object);
-            for collection in bpy.data.collections:
-                try:
-                    bpy.context.scene.collection.objects.unlink(bpy.context.active_object);
-                except:
-                    None
-            try:
-                bpy.data.collections.get("Bonds").objects.link(bpy.context.active_object);
-            except:
-                None;
-    
-
-    def make_collections(self):
-        if not bpy.data.collections.get("Atoms"):
-            bpy.data.collections.new(name  = "Atoms")
-            bpy.context.scene.collection.children.link(bpy.data.collections["Atoms"])
-        if not bpy.data.collections.get("Bonds"):
-            bpy.data.collections.new(name  = "Bonds")
-            bpy.context.scene.collection.children.link(bpy.data.collections["Bonds"])
-        if not bpy.data.collections.get("Orbitals"):
-            bpy.data.collections.new(name  = "Orbitals")
-            bpy.context.scene.collection.children.link(bpy.data.collections["Orbitals"])
-
+            obj = bpy.context.active_object;
+            self.cylinderMeshes.append(obj);
+            self.meshes.append(obj);
+            self.unlink_obj(obj)
+            self.link_obj(obj, self.collection)
+        
 
     def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True):
         """
@@ -713,7 +715,6 @@ class Molecule(Atom):
             supplied as a dictionary.
             stick means stick and ball model. It is used to give emphasis to the orbitals instead of atoms themselves
         """
-        self.make_collections();
         self.make_atom_meshes(stick, prettify_radii = prettify_radii);
         self.make_cylinder_meshes(stick, prettify_radii = prettify_radii);
 
