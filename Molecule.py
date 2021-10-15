@@ -625,18 +625,26 @@ class Molecule(Atom):
         bonds = []
         orders = []
         with open(path, "r") as f:
+            i = 0;
+            while i<100:
+                if f.readline()[1:4].isalpha():
+                    f.readline();
+                    break
+                i+=1;
             line1 = f.readline()
             n_atoms = int(line1[:3])
-            n_bonds = int(line1[3:])
+            n_bonds = int(line1[3:6])
             lines = f.readlines()
             for i,l in enumerate(lines):
                 if i < n_atoms:
                     l = l.split()
-                    atoms.append(l[0])
-                    coordinates.append([float(num) for num in l[1:]])
+                    atoms.append(l[3])
+                    coordinates.append([float(num) for num in l[:3]])
                 else:
-                    bonds.append([int(l[:3]), int(l[3:6])])
-                    orders.append([int(l[6:])])
+                    if i > n_bonds + n_atoms - 1:
+                        break
+                    bonds.append([int(l[:3])-1, int(l[3:6])-1])
+                    orders.append(int(l[6:9]))
         return atoms, coordinates, bonds, orders
             
     @classmethod
@@ -770,7 +778,7 @@ class Molecule(Atom):
             self.link_obj(obj, self.collection)
         
 
-    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True):
+    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True):
         """
             Creates all the meshes.
             mirror_options and rotaiton_axis_options are the arguments that can be suppplied
@@ -782,6 +790,12 @@ class Molecule(Atom):
         """
         self.make_atom_meshes(stick, prettify_radii = prettify_radii);
         self.make_cylinder_meshes(stick, prettify_radii = prettify_radii);
+
+        if show_double_bonds:
+            for i, o in enumerate(self.bondOrder):
+                if o == 1:
+                    continue
+                self.make_double_bond(i, self.connections[i], self.find_neighbours(self.connections[i]))
 
         #These are used for animations
         if not hasattr(self, "mule"):
