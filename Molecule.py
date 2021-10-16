@@ -322,6 +322,7 @@ class Molecule(Atom):
         self.transition = 59;#It would be concise to make this a class property. But I am not sure yet.
         self.short_pause = 1;
         self.collection = self.make_collection(collection);
+        self.outline_materials = []; #Materials used for cartoonish style 
         self.orbital_indices = np.array([0 for i in range(len(self.position))]).astype(bool);
         self.orbital_meshes = [None for i in range(len(self.position))]; #Meshes of molecular orbitals
         self.orbital_matrices = np.tile(np.eye(4), (len(self.position), 1, 1)); #Matrices of molecular orbitals
@@ -330,7 +331,41 @@ class Molecule(Atom):
         try:
             self.mule = self.make_empty()
         except:
-            None#Only works from inside blender, even though this class can be used outside
+            None #Only works from inside blender, even though this class can be used outside
+            
+    def make_outline_material(self):
+        m = bpy.data.materials.new(name="AtomBondOutline");
+        m.use_nodes = True;
+        emmNode = m.node_tree.nodes.new(type="ShaderNodeEmission") # creates Emission shader node.
+        origNode = m.node_tree.nodes["Principled BSDF"];
+        OutputNode = m.node_tree.nodes["Material Output"]
+        m.node_tree.links.new(OutputNode.inputs[0], emmNode.outputs[0])
+        m.node_tree.nodes.remove(origNode);
+        emmNode.inputs[0].default_value = (0, 0, 0, 1);
+        m.use_backface_culling = True;
+        return m;
+
+    def cartoonify(self):
+        """
+            Makes several PERMANENT changes such tha the molecule (when rendered with EEVEE), look cartoonish.
+            """
+        [self.outline_materials.append(self.make_outline_material()) for i in range(2)]; # Make the dark outline. The reason we make a copy of the original is because some bonds do not have 2 materials.
+        for m in self.material:
+            m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = 0.02; #Set the specular to a low value, as that looks weird in EEVEE
+            
+        for mesh_list in [self.atomMeshes, self.cylinderMeshes]:
+            self.deselect_all();# Deselect everything
+            self.select(mesh_list); # Select the set of objects in question
+            self.set_active(mesh_list[0]);
+            bpy.ops.object.modifier_add(type = "SOLIDIFY");
+            mesh_list[0].modifiers["Solidify"].thickness = 0.03;
+            mesh_list[0].modifiers["Solidify"].offset = 0;
+            mesh_list[0].modifiers["Solidify"].material_offset = 2;
+            mesh_list[0].modifiers["Solidify"].use_flip_normals = True;
+            bpy.ops.object.make_links_data(type="MODIFIERS");
+            for ob in mesh_list:
+                for m in self.outline_materials:
+                    ob.data.materials.append(m);            
 
     def unlink_obj(self, obj):
         for collection in bpy.data.collections:
@@ -613,8 +648,8 @@ class Molecule(Atom):
     #Now onto the rendering part
     def getBondRadius(self, rad):
         r = rad.mean()/2.3;
-        if any(r > rad):
-            r = min(rad);
+        if any(r > rad/2):
+            r = min(rad)/2;
         return r;
 
     @classmethod
@@ -734,7 +769,7 @@ class Molecule(Atom):
         rad[np.array(self.names) == "H"] = 0.25
         return rad;
 
-    def make_cylinder_meshes(self, stick, prettify_radii = True):
+    def make_cylinder_meshes(self, stick, prettify_radii = True, cartoonish = False):
         if type(self.connections) == type(None):
             return;
 
@@ -756,10 +791,14 @@ class Molecule(Atom):
             p1p0 = (p1-p0)/np.linalg.norm(p1-p0);
             middle = (p1+p1p0*(r0-r1) + p0)/2;
             if self.names[i1] != self.names[i0]: #If they are different atoms we make half the bond of each color. Else we make a single long cyllinder
-                c0 = self.cylinder_between(*middle, *p0, r);
+                if not cartoonish:
+                    c0 = self.cylinder_between(*middle, *p0, r);
+                    c1 = self.cylinder_between(*middle, *p1, r);
+                else:
+                    c0 = self.cylinder_between(*(middle - 0.0001*p1p0), *p0, r); # IF we are in cartoonish mode, the faces of the two different cylinders may overlap.
+                    c1 = self.cylinder_between(*(middle + 0.0001*p1p0), *p1, r);
                 self.smooth_obj(c0, modifier = False);
                 c0.data.use_auto_smooth = True;
-                c1 = self.cylinder_between(*middle, *p1, r);
                 self.smooth_obj(c1, modifier = False);
                 c1.data.use_auto_smooth = True;
                 c0.active_material = m0;
@@ -780,7 +819,7 @@ class Molecule(Atom):
             self.link_obj(obj, self.collection)
         
 
-    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True):
+    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False):
         """
             Creates all the meshes.
             mirror_options and rotaiton_axis_options are the arguments that can be suppplied
@@ -791,13 +830,15 @@ class Molecule(Atom):
             stick means stick and ball model. It is used to give emphasis to the orbitals instead of atoms themselves
         """
         self.make_atom_meshes(stick, prettify_radii = prettify_radii);
-        self.make_cylinder_meshes(stick, prettify_radii = prettify_radii);
+        self.make_cylinder_meshes(stick, prettify_radii = prettify_radii, cartoonish = cartoonish);
 
         if show_double_bonds:
             for i, o in enumerate(self.bondOrder):
                 if o == 1:
                     continue
                 self.make_double_bond(i, self.connections[i], self.find_neighbours(self.connections[i]))
+        if cartoonish:
+            self.cartoonify();
 
         #These are used for animations
         if not hasattr(self, "mule"):
