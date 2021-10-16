@@ -345,13 +345,13 @@ class Molecule(Atom):
 
     def find_normal_from_points(self, center, corners):
         """
-            Center 1x3 array with the coordinates of the center of the figure
-            corners nx3 array with the coordinates of the edges of the figure
-            returns 1x3 array with "average" normal.
+            Center 1x3 array with the coordinates of the center of the figure (center of the double bond)
+            corners nx3 array with the coordinates of the edges of the figure (all atoms connected to the double bond and all those connected to these atoms. (0th and 1st gen cousins of the double bond)
+            returns 1x3 array with "average" normal. To the plane formed by these points.
             Note this can only be used if there is more than 1 corner!!!!
             """
         r = (center - corners)/np.linalg.norm(center-corners, keepdims = True, axis = 1);
-        normals = np.array([np.cross(r[0], r[i]) for i in range(1, len(r))]);
+        normals = np.array([np.cross(r[0], r[i]) for i in range(2, len(r))]);
         dots = np.array([np.dot(normals[0], n) for n in normals]);
         normals[dots<0]*=-1; #Invert antiparallel.
         avg_norm = np.sum(normals, axis = 0)/np.sqrt(len(normals))
@@ -365,25 +365,24 @@ class Molecule(Atom):
             neighbour_indices: list (0,N) int indices of 1st gen neighbouts to atom_pair_indices
             """
         c = self.cylinderMeshes[bond_index];
-        cmat = np.array(c.matrix_world);
-        cmat[:3, :3] = cmat[:3, :3]@(np.eye(3)*[[.4],[.4],[1]]);
+        scale = .4;
+        c.matrix_world = c.matrix_world@mathutils.Matrix(np.diag([scale, scale, 1, 1]));
+        cmat = np.array(c.matrix_world); #The unit vectors present here need to be used later.
         rad = self.cylinderRadii[bond_index];
         d = rad/1.9
         if len(neighbour_indices) < 2:
             r = np.array(cmat[:3, 0]);
             r = r/np.linalg.norm(r);
-            
         else:
             r_center = np.mean(self.position[atom_pair_indices, :], axis = 0)
-            r_neighbours = self.position[neighbour_indices, :]
+            r_neighbours = self.position[np.r_[atom_pair_indices,neighbour_indices], :]
             normal = self.find_normal_from_points(r_center, r_neighbours)
             r = np.array(cmat[:3, 2]);
             r = r/np.linalg.norm(r);
             r = np.cross(normal, r); #Now we have a vector that points perpendicular to the bonding axis!
-
-        c.matrix_world = mathutils.Matrix.Translation(r*d)@mathutils.Matrix(cmat);
         c_copy = c.copy();
-        c_copy.matrix_world = mathutils.Matrix.Translation(-r*d)@mathutils.Matrix(cmat);
+        c.matrix_world = mathutils.Matrix.Translation(r*d)@c.matrix_world;
+        c_copy.matrix_world = mathutils.Matrix.Translation(-r*d)@c_copy.matrix_world;
         self.link_obj(c_copy, self.collection)
         self.deselect_all()
         self.select([c, c_copy])
@@ -393,9 +392,9 @@ class Molecule(Atom):
             
     def find_neighbours(self, pair):
         connections = np.array(self.connections)
-        contains_first = {*connections[np.any(pair[0] == connections, axis = 1), :].flatten()}
-        contains_second = {*connections[np.any(pair[1] == connections, axis = 1), :].flatten()}
-        return np.array(list({*contains_first, *contains_second}-{*pair}))
+        pair = np.array(pair)
+        contains_connections = {*connections[np.any(pair[:, np.newaxis, np.newaxis] == connections, axis = (0,2)), :].flatten()}
+        return np.array(list({*contains_connections}-{*pair}))
 
         
     def make_collection(self, name):
@@ -1064,6 +1063,8 @@ class Molecule(Atom):
                 
             for mesh in fading_meshes:
                 #Initial fade out
+                print("Fading rotation");
+                print(mesh)
                 self.add_material_transition("alpha", mesh, t0 + t2, t2, 1, .5)
                 self.add_material_transition("alpha", mesh, t0 + tt + sp*2, t2, .5, 0)
                 self.add_material_transition("alpha", mesh, tf - t2, t2, 0, 1)
@@ -1081,7 +1082,7 @@ class Molecule(Atom):
         obj.keyframe_insert(data_path = property, frame = t0+transition);
 
     def add_material_transition(self, property_name, obj, t0, transition, init, end, slot = "all"):
-        property_index = {"base_color": 0, "transmission": 15, "emission": 17, "alpha": 18}[property_name]
+        property_index = {"base_color": 0, "transmission": 15, "emission": 17, "alpha": 19}[property_name]
         self.deselect_all()
         obj.select_set(True)
         self.set_active(obj)
