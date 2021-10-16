@@ -715,10 +715,11 @@ class Molecule(Atom):
         rad = self.radius.copy();
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius)
-        for p, r, m in zip(self.position, rad, self.material):
+        for p, r, m, n in zip(self.position, rad, self.material, self.names):
             bpy.ops.mesh.primitive_ico_sphere_add(radius=(r if not stick else r**.3/5), location=p);
             obj = bpy.context.active_object;
             obj.active_material = m;
+            obj.name = n;
             if smooth:
                 self.smooth_obj(obj, modifier = True);
             self.atomMeshes.append(obj);
@@ -748,6 +749,7 @@ class Molecule(Atom):
             p0, p1 = self.position[i0, :], self.position[i1, :];
             m0, m1 = self.material[i0], self.material[i1];
             r0, r1 = rad[i0], rad[i1];
+            n0, n1 = self.names[i0], self.names[i1];
             r = self.getBondRadius(rad[np.array([i0, i1])]);
             if stick:
                 r =  r**.5/10 + .02
@@ -771,6 +773,7 @@ class Molecule(Atom):
                 c0.active_material = m0;
             self.cylinderRadii.append(r);
             obj = bpy.context.active_object;
+            obj.name = n0 + n1;
             self.cylinderMeshes.append(obj);
             self.meshes.append(obj);
             self.unlink_obj(obj)
