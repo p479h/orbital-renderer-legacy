@@ -1381,7 +1381,7 @@ class Molecule(Atom):
                 starts.append(t0);
             else:
                 for ni, n in enumerate(normals[ci]):
-                    d = os.path.join(new_dir, cc + "_" + str(ni));
+                    d = os.path.join(new_dir, cc + "_" + str(ni).zfll(2));
                     d = PointGroup.normal_to_directory(d); #Removes all the primes from the directory name
                     starts_directories.append(d);
                     if operation == "sig":
