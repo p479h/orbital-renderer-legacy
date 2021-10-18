@@ -334,6 +334,8 @@ class Molecule(Atom):
             None #Only works from inside blender, even though this class can be used outside
             
     def make_outline_material(self):
+        if bpy.data.materials.get("AtomBondOutline"):
+            return bpy.data.materials.get("AtomBondOutline");
         m = bpy.data.materials.new(name="AtomBondOutline");
         m.use_nodes = True;
         emmNode = m.node_tree.nodes.new(type="ShaderNodeEmission") # creates Emission shader node.
@@ -349,7 +351,7 @@ class Molecule(Atom):
         """
             Makes several PERMANENT changes such tha the molecule (when rendered with EEVEE), look cartoonish.
             """
-        [self.outline_materials.append(self.make_outline_material()) for i in range(2)]; # Make the dark outline. The reason we make a copy of the original is because some bonds do not have 2 materials.
+        self.outline_materials.append(self.make_outline_material()) # Make the dark outline. The reason we make a copy of the original is because some bonds do not have 2 materials.
         for m in self.material:
             m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = 0.02; #Set the specular to a low value, as that looks weird in EEVEE
             
