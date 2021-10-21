@@ -395,7 +395,7 @@ class Molecule(Atom):
         return avg_norm
         
 
-    def make_double_bond(self, bond_index, atom_pair_indices, neighbour_indices = []):
+    def make_higher_order_bond(self, bond_index, atom_pair_indices, neighbour_indices = [], order = 2):
         """
             bond_index: int with the index of the single bond which is to be doubled
             atom_pair_indices: list (0,2) int indices of atoms which form the bond
@@ -418,11 +418,17 @@ class Molecule(Atom):
             r = r/np.linalg.norm(r);
             r = np.cross(normal, r); #Now we have a vector that points perpendicular to the bonding axis!
         c_copy = c.copy();
+        if order == 3:
+            c_copy2 = c.copy();
+            self.link_obj(c_copy2, self.collection);
+            r*=1.8;
         c.matrix_world = mathutils.Matrix.Translation(r*d)@c.matrix_world;
         c_copy.matrix_world = mathutils.Matrix.Translation(-r*d)@c_copy.matrix_world;
         self.link_obj(c_copy, self.collection)
         self.deselect_all()
         self.select([c, c_copy])
+        if order == 3:
+            self.select([c, c_copy, c_copy2]);
         self.set_active(c)
         bpy.ops.object.join();#The double bond now occupies the same slot as the former single bond.
 
@@ -838,7 +844,10 @@ class Molecule(Atom):
             for i, o in enumerate(self.bondOrder):
                 if o == 1:
                     continue
-                self.make_double_bond(i, self.connections[i], self.find_neighbours(self.connections[i]))
+                elif o == 2:
+                    self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]))
+                else:
+                    self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = 3);
         if cartoonish:
             self.cartoonify();
 
