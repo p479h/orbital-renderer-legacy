@@ -874,7 +874,7 @@ class Molecule(Atom):
             self.set_active(obj);
             bpy.ops.anim.keyframe_insert_menu(type = property);
 
-    def stickyfy(self, stick_factor, apply = True):
+    def stickify(self, stick_factor, apply = True):
         for b in self.bondMeshes:
             self.scale_obj(b, [*[stick_factor]*2, 1], apply = apply);
         for a in self.atomMeshes:
@@ -904,7 +904,7 @@ class Molecule(Atom):
                     self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = o);
                     
         if stick: #Stick has to come after show_double_bonds
-            self.stickyfy(stick_factor, apply = True)
+            self.stickify(stick_factor, apply = True)
                 
         if cartoonish:
             self.cartoonify(edgewidth = .02);
