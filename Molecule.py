@@ -402,11 +402,11 @@ class Molecule(Atom):
             neighbour_indices: list (0,N) int indices of 1st gen neighbouts to atom_pair_indices
             """
         c = self.cylinderMeshes[bond_index];
-        scale = .4;
-        c.matrix_world = c.matrix_world@mathutils.Matrix(np.diag([scale, scale, 1, 1]));
+        scale = .55 if len(neighbour_indices) == 2 else 0.4;
+        self.scale_obj(c, [scale, scale, 1]);
         cmat = np.array(c.matrix_world); #The unit vectors present here need to be used later.
         rad = self.cylinderRadii[bond_index];
-        d = rad/1.9
+        d = rad/2.1
         if len(neighbour_indices) < 2:
             r = np.array(cmat[:3, 0]);
             r = r/np.linalg.norm(r);
@@ -431,6 +431,7 @@ class Molecule(Atom):
             self.select([c, c_copy, c_copy2]);
         self.set_active(c)
         bpy.ops.object.join();#The double bond now occupies the same slot as the former single bond.
+        bpy.ops.object.transform_apply(scale = True, location = False, rotation = False);
 
         #Now we set the correct origin
         bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY");
@@ -788,14 +789,13 @@ class Molecule(Atom):
             """
         if len(axes_factors) == 3:#The fourth dimension shall never be scaled!
             axes_factors = [*axes_factors, 1];
-        mat = mathutils.Matrix( np.diag(axes_factors) );
-        obj.matrix_world = obj.matrix_world@mat;
+        self.deselect_all()
+        self.select([obj])
+        self.set_active(obj);
+        bpy.ops.transform.resize(value=axes_factors[:3], orient_type='LOCAL')
         if apply:
-            self.deselect_all();
-            self.select([obj]);
-            self.set_active(obj);
             bpy.ops.object.transform_apply(scale = True);
-        return mat;
+        return obj;
 
     def make_cylinder_meshes(self, stick, prettify_radii = True, cartoonish = False):
         if type(self.connections) == type(None):
@@ -845,8 +845,27 @@ class Molecule(Atom):
             self.meshes.append(obj);
             self.unlink_obj(obj)
             self.link_obj(obj, self.collection)
-        
 
+    def keyframe_state(self, objs, property = "all"):
+        if property == "all":
+            property = "LocRotScale";
+        if property == "Scale":
+            property = "Scaling";
+        self.deselect_all();
+        self.select(objs);
+        for obj in objs:
+            self.set_active(obj);
+            bpy.ops.anim.keyframe_insert_menu(type = property);
+
+    def stickyfy(self, stick_factor, apply = True):
+        for b in self.cylinderMeshes:
+            self.scale_obj(b, [*[stick_factor]*2, 1], apply = apply);
+        for a in self.atomMeshes:
+            self.scale_obj(a, [stick_factor]*3, apply = apply);
+
+    def switch_render_engine(self, engine = "Cycles"):
+        bpy.data.scenes["Scene"].render.engine = engine;
+    
     def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False, stick_factor = 0.5):
         """
             Creates all the meshes.
@@ -868,13 +887,11 @@ class Molecule(Atom):
                     self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = o);
                     
         if stick: #Stick has to come after show_double_bonds
-            for b in self.cylinderMeshes:
-                self.scale_obj(b, [*[stick_factor]*2, 1], apply = True);
-            for a in self.atomMeshes:
-                self.scale_obj(a, [stick_factor]*3, apply = True);
+            self.stickyfy(stick_factor, apply = True)
                 
         if cartoonish:
             self.cartoonify(edgewidth = .02);
+            self.switch_render_engine("BLENDER_EEVEE");
 
         #These are used for animations
         if not hasattr(self, "mule"):
