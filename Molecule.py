@@ -332,6 +332,10 @@ class Molecule(Atom):
             self.mule = self.make_empty()
         except:
             None #Only works from inside blender, even though this class can be used outside
+
+    @staticmethod
+    def set_frame(frame):
+        bpy.data.scenes["Scene"].frame_current = frame;
             
     def make_outline_material(self):
         if bpy.data.materials.get("AtomBondOutline"):
@@ -369,18 +373,21 @@ class Molecule(Atom):
                 for m in self.outline_materials:
                     ob.data.materials.append(m);            
 
-    def unlink_obj(self, obj):
+    @staticmethod
+    def unlink_obj(obj):
         for collection in bpy.data.collections:
             try:
                 bpy.context.scene.collection.objects.unlink(obj);
             except:
                 None; #Sometimes an object is not part of a collection, which would throw an error.
-                    
-    def link_obj(self, obj, collection):
+
+    @staticmethod                
+    def link_obj(obj, collection):
         collection.objects.link(obj);
 
 
-    def find_normal_from_points(self, center, corners):
+    @staticmethod
+    def find_normal_from_points(center, corners):
         """
             Center 1x3 array with the coordinates of the center of the figure (center of the double bond)
             corners nx3 array with the coordinates of the edges of the figure (all atoms connected to the double bond and all those connected to these atoms. (0th and 1st gen cousins of the double bond)
@@ -436,14 +443,13 @@ class Molecule(Atom):
         #Now we set the correct origin
         bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY");
 
-            
     def find_neighbours(self, pair):
         connections = np.array(self.connections)
         pair = np.array(pair)
         contains_connections = {*connections[np.any(pair[:, np.newaxis, np.newaxis] == connections, axis = (0,2)), :].flatten()}
         return np.array(list({*contains_connections}-{*pair}))
 
-        
+
     def make_collection(self, name):
         if not name:
             name = self.name
@@ -452,14 +458,15 @@ class Molecule(Atom):
             bpy.context.scene.collection.children.link(bpy.data.collections[name])
         return bpy.context.scene.collection.children.get(name);
         
-
-    def copy_material(self, obj):
+    @staticmethod
+    def copy_material(obj):
         """
         obj: blender object/mesh with an active material
         return
             copy of material for animation"""
         return obj.active_material.copy()
 
+    
     def find_static_atoms(self, matrix, tol = 2e-1): # Lower tolerances require better xyz files... But this is good enough for most purpuses
         new_positions = (matrix@self.position.T).T
         r = np.linalg.norm(self.position - new_positions, axis = 1, keepdims = False)
@@ -563,6 +570,7 @@ class Molecule(Atom):
         #self.orbital_matrices[-1][3, :3] = offset[:]
         return bpy.context.active_object
 
+    
     def read_verts_and_faces(self, vertsfile, facesfile, directory = "ao_meshes"):
         if directory:
             vertsfile = os.path.join(directory, vertsfile)
