@@ -313,7 +313,7 @@ class Molecule(Atom):
         self.connections = connections; # Bond indices
         self.meshes = []; #All of this molecules meshes
         self.atomMeshes = [];
-        self.cylinderMeshes = [];
+        self.bondMeshes = [];
         self.cylinderRadii = [];
         self.bondOrder = orders; #The order of the bonds!
         self.mules = []; #Used for the animations
@@ -322,6 +322,9 @@ class Molecule(Atom):
         self.transition = 59;#It would be concise to make this a class property. But I am not sure yet.
         self.short_pause = 1;
         self.collection = self.make_collection(collection);
+        self.bond_collection = self.make_collection(self.collection, "bonds")
+        self.atom_collection = self.make_collection(self.collection, "atoms")
+        self.orbital_collection=  self.make_collection(self.collection, "orbitals")
         self.outline_materials = []; #Materials used for cartoonish style 
         self.orbital_indices = np.array([0 for i in range(len(self.position))]).astype(bool);
         self.orbital_meshes = [None for i in range(len(self.position))]; #Meshes of molecular orbitals
@@ -359,7 +362,7 @@ class Molecule(Atom):
         for m in self.material:
             m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = 0.02; #Set the specular to a low value, as that looks weird in EEVEE
             
-        for mesh_list in [self.atomMeshes, self.cylinderMeshes]:
+        for mesh_list in [self.atomMeshes, self.bondMeshes]:
             self.deselect_all();# Deselect everything
             self.select(mesh_list); # Select the set of objects in question
             self.set_active(mesh_list[0]);
@@ -408,7 +411,7 @@ class Molecule(Atom):
             atom_pair_indices: list (0,2) int indices of atoms which form the bond
             neighbour_indices: list (0,N) int indices of 1st gen neighbouts to atom_pair_indices
             """
-        c = self.cylinderMeshes[bond_index];
+        c = self.bondMeshes[bond_index];
         scale = .55 if len(neighbour_indices) == 2 else 0.4;
         self.scale_obj(c, [scale, scale, 1]);
         cmat = np.array(c.matrix_world); #The unit vectors present here need to be used later.
@@ -450,13 +453,19 @@ class Molecule(Atom):
         return np.array(list({*contains_connections}-{*pair}))
 
 
-    def make_collection(self, name):
+    def make_collection(self, parent = None, name = None):
         if not name:
             name = self.name
-        if not bpy.data.collections.get(name):
-            bpy.data.collections.new(name  = name)
-            bpy.context.scene.collection.children.link(bpy.data.collections[name])
-        return bpy.context.scene.collection.children.get(name);
+        if not parent:
+            if not bpy.data.collections.get(name):
+                bpy.data.collections.new(name  = name)
+                bpy.context.scene.collection.children.link(bpy.data.collections[name])
+            return bpy.context.scene.collection.children.get(name);
+        else:
+            print(parent, name)
+            bpy.data.collections.new(name = name);
+            parent.children.link(bpy.data.collections[name]);
+            return bpy.data.collections[name];
         
     @staticmethod
     def copy_material(obj):
@@ -586,7 +595,7 @@ class Molecule(Atom):
         new_mesh.from_pydata((verts*scale+offset).tolist(), [], faces.tolist());
         new_mesh.update()
         new_object = bpy.data.objects.new('Orbital', new_mesh)
-        self.collection.objects.link(new_object)
+        self.orbital_collection.objects.link(new_object)
         new_object.select_set(True)
         bpy.context.view_layer.objects.active = new_object
         bpy.ops.object.shade_smooth()
@@ -781,7 +790,7 @@ class Molecule(Atom):
             self.atomMeshes.append(obj);
             self.meshes.append(obj);
             self.unlink_obj(obj);
-            self.link_obj(obj, self.collection);
+            self.link_obj(obj, self.atom_collection);
         return self.meshes
             
     def get_smaller_radii(self, radius, s = 0.70):
@@ -809,7 +818,7 @@ class Molecule(Atom):
         if type(self.connections) == type(None):
             return;
 
-        #self.cylinderMeshes = [];
+        #self.bondMeshes = [];
         #self.cylinderRadii = [];
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius);
@@ -849,10 +858,10 @@ class Molecule(Atom):
             self.cylinderRadii.append(r);
             obj = bpy.context.active_object;
             obj.name = n0 + n1;
-            self.cylinderMeshes.append(obj);
+            self.bondMeshes.append(obj);
             self.meshes.append(obj);
             self.unlink_obj(obj)
-            self.link_obj(obj, self.collection)
+            self.link_obj(obj, self.bond_collection)
 
     def keyframe_state(self, objs, property = "all"):
         if property == "all":
@@ -866,7 +875,7 @@ class Molecule(Atom):
             bpy.ops.anim.keyframe_insert_menu(type = property);
 
     def stickyfy(self, stick_factor, apply = True):
-        for b in self.cylinderMeshes:
+        for b in self.bondMeshes:
             self.scale_obj(b, [*[stick_factor]*2, 1], apply = apply);
         for a in self.atomMeshes:
             self.scale_obj(a, [stick_factor]*3, apply = apply);
@@ -900,6 +909,8 @@ class Molecule(Atom):
         if cartoonish:
             self.cartoonify(edgewidth = .02);
             self.switch_render_engine("BLENDER_EEVEE");
+        else:
+            self.switch_render_engine("CYCLES");
 
         #These are used for animations
         if not hasattr(self, "mule"):
