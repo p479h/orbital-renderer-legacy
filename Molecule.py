@@ -347,7 +347,7 @@ class Molecule(Atom):
         m.use_backface_culling = True;
         return m;
 
-    def cartoonify(self):
+    def cartoonify(self, edgewidth = 0.03):
         """
             Makes several PERMANENT changes such tha the molecule (when rendered with EEVEE), look cartoonish.
             """
@@ -360,7 +360,7 @@ class Molecule(Atom):
             self.select(mesh_list); # Select the set of objects in question
             self.set_active(mesh_list[0]);
             bpy.ops.object.modifier_add(type = "SOLIDIFY");
-            mesh_list[0].modifiers["Solidify"].thickness = 0.03;
+            mesh_list[0].modifiers["Solidify"].thickness = edgewidth;
             mesh_list[0].modifiers["Solidify"].offset = 0;
             mesh_list[0].modifiers["Solidify"].material_offset = 2;
             mesh_list[0].modifiers["Solidify"].use_flip_normals = True;
@@ -431,6 +431,9 @@ class Molecule(Atom):
             self.select([c, c_copy, c_copy2]);
         self.set_active(c)
         bpy.ops.object.join();#The double bond now occupies the same slot as the former single bond.
+
+        #Now we set the correct origin
+        bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY");
 
             
     def find_neighbours(self, pair):
@@ -759,7 +762,8 @@ class Molecule(Atom):
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius)
         for p, r, m, n in zip(self.position, rad, self.material, self.names):
-            bpy.ops.mesh.primitive_ico_sphere_add(radius=(r if not stick else r**.3/5), location=p);
+            #bpy.ops.mesh.primitive_ico_sphere_add(radius=(r if not stick else r**.3/5), location=p);
+            bpy.ops.mesh.primitive_ico_sphere_add(radius=r, location=p);
             obj = bpy.context.active_object;
             obj.active_material = m;
             obj.name = n;
@@ -776,6 +780,22 @@ class Molecule(Atom):
         rad[rad>self.radii_list["Fe"]*s] = self.radii_list["Fe"]*s;
         rad[np.array(self.names) == "H"] = 0.25
         return rad;
+
+    def scale_obj(self, obj, axes_factors, apply = False):
+        """
+            Scales the obj along defined axes.
+            Perfect for making bonds thinner along their xy planes.
+            """
+        if len(axes_factors) == 3:#The fourth dimension shall never be scaled!
+            axes_factors = [*axes_factors, 1];
+        mat = mathutils.Matrix( np.diag(axes_factors) );
+        obj.matrix_world = obj.matrix_world@mat;
+        if apply:
+            self.deselect_all();
+            self.select([obj]);
+            self.set_active(obj);
+            bpy.ops.object.transform_apply(scale = True);
+        return mat;
 
     def make_cylinder_meshes(self, stick, prettify_radii = True, cartoonish = False):
         if type(self.connections) == type(None):
@@ -794,8 +814,8 @@ class Molecule(Atom):
             r0, r1 = rad[i0], rad[i1];
             n0, n1 = self.names[i0], self.names[i1];
             r = self.getBondRadius(rad[np.array([i0, i1])]);
-            if stick:
-                r =  r**.5/10 + .02
+            #if stick:
+                #r =  r**.5/10 + .02
             p1p0 = (p1-p0)/np.linalg.norm(p1-p0);
             middle = (p1+p1p0*(r0-r1) + p0)/2;
             if self.names[i1] != self.names[i0]: #If they are different atoms we make half the bond of each color. Else we make a single long cyllinder
@@ -848,8 +868,15 @@ class Molecule(Atom):
                     self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]))
                 else:
                     self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = 3);
+                    
+        if stick: #Stick has to come after show_double_bonds
+            for b in self.cylinderMeshes:
+                self.scale_obj(b, [*[.5]*2, 1], apply = True);
+            for a in self.atomMeshes:
+                self.scale_obj(a, [.5]*3, apply = True);
+                
         if cartoonish:
-            self.cartoonify();
+            self.cartoonify(edgewidth = .02);
 
         #These are used for animations
         if not hasattr(self, "mule"):
