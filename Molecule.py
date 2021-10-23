@@ -847,7 +847,7 @@ class Molecule(Atom):
             self.link_obj(obj, self.collection)
         
 
-    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False):
+    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False, stick_factor = 0.5):
         """
             Creates all the meshes.
             mirror_options and rotaiton_axis_options are the arguments that can be suppplied
@@ -864,16 +864,14 @@ class Molecule(Atom):
             for i, o in enumerate(self.bondOrder):
                 if o == 1:
                     continue
-                elif o == 2:
-                    self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]))
-                else:
-                    self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = 3);
+                elif o < 4: #We can not have 4 bonds!!!
+                    self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = o);
                     
         if stick: #Stick has to come after show_double_bonds
             for b in self.cylinderMeshes:
-                self.scale_obj(b, [*[.5]*2, 1], apply = True);
+                self.scale_obj(b, [*[stick_factor]*2, 1], apply = True);
             for a in self.atomMeshes:
-                self.scale_obj(a, [.5]*3, apply = True);
+                self.scale_obj(a, [stick_factor]*3, apply = True);
                 
         if cartoonish:
             self.cartoonify(edgewidth = .02);
