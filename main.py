@@ -67,7 +67,6 @@ bpy.data.scenes["Scene"].render.image_settings.file_format = "PNG"
 bpy.data.scenes["Scene"].render.image_settings.color_mode = "RGBA"
 
 
-
 # Setting the camera position through its world matrix (can be tuned through the json file)
 bpy.data.objects.get("Camera").matrix_world = mathutils.Matrix(data["camera_matrix"])
 if "focal_length" in data:

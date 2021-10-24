@@ -337,6 +337,32 @@ class Molecule(Atom):
             None #Only works from inside blender, even though this class can be used outside
 
     @staticmethod
+    def set_camera(
+        engine: str = "CYCLES",
+        samples: int = 60,
+        resolution_xy: (int, int) = (512, 512),
+        tile: (int, int) = (256, 256),
+        resolution_percentage: int = 100,
+        file_format: str = "PNG",
+        color_mode: str = "RGBA",
+        background_transparent: bool = True,
+        focal_length: float = 75,
+        camera_matrix: mathutils.Matrix = mathutils.Matrix([[0.707, -0.395, 0.586, 10.822], [0.707, 0.395, -0.586, -10.038], [0.0, 0.829, 0.559, 9.932], [0.0, 0.0, 0.0, 1.0]])
+        ) -> None:
+        bpy.data.scenes["Scene"].render.film_transparent = background_transparent;
+        bpy.context.scene.render.resolution_x = resolution_xy[0];
+        bpy.context.scene.render.resolution_y = resolution_xy[1];
+        bpy.context.scene.render.tile_x = tile[0];
+        bpy.context.scene.render.tile_y = tile[1];
+        bpy.context.scene.render.resolution_percentage = resolution_percentage;
+        bpy.data.scenes["Scene"].render.image_settings.file_format = file_format;
+        bpy.data.scenes["Scene"].render.image_settings.color_mode = color_mode;
+        bpy.data.cameras[0].lens = focal_length;
+        bpy.data.objects.get("Camera").matrix_world = camera_matrix;
+        
+        
+
+    @staticmethod
     def set_frame(frame):
         bpy.data.scenes["Scene"].frame_current = frame;
             
