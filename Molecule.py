@@ -174,6 +174,12 @@ class Atom:
         #This makes it possible to specify the positions and such at a later stage after the creation of the atom
         setattr(self, attribute, argument);
 
+    def set_origin(self, obj, type = "ORIGIN_GEOMETRY"):
+        self.deselect_all()
+        self.select([obj])
+        self.set_active(obj)
+        bpy.ops.object.origin_set(type = type);
+
     def set_name(self, name):
         self.set(name, "name");
         return self.name;
@@ -470,7 +476,7 @@ class Molecule(Atom):
         bpy.ops.object.transform_apply(scale = True, location = False, rotation = False);
 
         #Now we set the correct origin
-        bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY");
+        self.set_origin(c);
 
     def find_neighbours(self, pair):
         connections = np.array(self.connections)
@@ -600,6 +606,7 @@ class Molecule(Atom):
             self.set_active(meshes[0])
             bpy.ops.object.join()
         self.orbital_meshes[atom_index] = bpy.context.view_layer.objects.active
+        self.set_origin(bpy.context.view_layer.objects.active);
         self.meshes.append(self.orbital_meshes[atom_index])
         self.orbital_names[atom_index] = name
         #self.orbital_matrices[-1][3, :3] = offset[:]
@@ -625,6 +632,7 @@ class Molecule(Atom):
         new_object.select_set(True)
         bpy.context.view_layer.objects.active = new_object
         bpy.ops.object.shade_smooth()
+        self.set_origin(new_object);
         return new_object;
 
     def erase_MO(self, MO): #MO is the mesh of the orbital
@@ -900,7 +908,7 @@ class Molecule(Atom):
             self.set_active(obj);
             bpy.ops.anim.keyframe_insert_menu(type = property);
 
-    def stickify(self, stick_factor, apply = True):
+    def dieting(self, stick_factor, apply = True):
         for b in self.bondMeshes:
             self.scale_obj(b, [*[stick_factor]*2, 1], apply = apply);
         for a in self.atomMeshes:
@@ -930,7 +938,7 @@ class Molecule(Atom):
                     self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = o);
                     
         if stick: #Stick has to come after show_double_bonds
-            self.stickify(stick_factor, apply = True)
+            self.dieting(stick_factor, apply = True)
                 
         if cartoonish:
             self.cartoonify(edgewidth = .02);
@@ -1477,7 +1485,7 @@ class Molecule(Atom):
                 starts.append(t0);
             else:
                 for ni, n in enumerate(normals[ci]):
-                    d = os.path.join(new_dir, cc + "_" + str(ni).zfll(2));
+                    d = os.path.join(new_dir, cc + "_" + str(ni).zfill(2));
                     d = PointGroup.normal_to_directory(d); #Removes all the primes from the directory name
                     starts_directories.append(d);
                     if operation == "sig":
