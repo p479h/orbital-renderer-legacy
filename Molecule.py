@@ -494,10 +494,11 @@ class Molecule(Atom):
                 bpy.context.scene.collection.children.link(bpy.data.collections[name])
             return bpy.context.scene.collection.children.get(name);
         else:
-            print(parent, name)
+            if parent.children.get(name):
+                return parent.children.get(name);
             bpy.data.collections.new(name = name);
             parent.children.link(bpy.data.collections[name]);
-            return bpy.data.collections[name];
+        return bpy.data.collections[name];
         
     @staticmethod
     def copy_material(obj):
