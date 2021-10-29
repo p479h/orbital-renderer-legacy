@@ -1,5 +1,7 @@
 import numpy as np;
-import mathutils;
+try:
+    import mathutils;
+except: None
 try:
     import scipy
 except:

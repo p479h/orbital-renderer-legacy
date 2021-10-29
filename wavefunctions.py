@@ -16,34 +16,34 @@ if __name__ == "__main__":
     print(np.__file__)
 
 #We assume a0 = 1 in all these functions
-@jit(nopython = True, cache = True, nogil=True)
-def S1(r, theta, phi):
+#@jit(nopython = True, cache = True, nogil=True)
+def s1(r, theta, phi):
     a0 = 0.53; #Angstroms!
     return 1/np.sqrt(np.pi*a0**3) * np.exp(-r/a0);
 
-@jit(nopython = True, cache = True, nogil=True)
-def S2(r, theta, phi):
+#@jit(nopython = True, cache = True, nogil=True)
+def s2(r, theta, phi):
     a0 = 0.53; #Angstroms
     return 1/4 * 1/np.sqrt(2*np.pi*a0**3) * (2 - r/a0) * np.exp(-r/(2*a0));
 
-@jit(nopython = True, cache = True, nogil=True)
-def P2z(r, theta, phi):
+#@jit(nopython = True, cache = True, nogil=True)
+def pz(r, theta, phi):
     a0 = 0.53;
     return 1/(4*np.sqrt(2*np.pi*a0**3))*r/a0*np.exp(-r/(2*a0))*np.cos(theta);
 
-@jit(nopython = True, cache = True, nogil=True)
-def P2x(r, theta, phi):
+#@jit(nopython = True, cache = True, nogil=True)
+def px(r, theta, phi):
     a0 = 0.53;
     return 1/(4*np.sqrt(2*np.pi*a0**3))*r/a0*np.exp(-r/(2*a0))*np.sin(theta)*np.cos(phi);
 
-@jit(nopython = True, cache = True, nogil=True)
-def P2y(r, theta, phi):
+#@jit(nopython = True, cache = True, nogil=True)
+def py(r, theta, phi):
     a0 = 0.53;
     return 1/(4*np.sqrt(2*np.pi*a0**3))*r/a0*np.exp(-r/(2*a0))*np.sin(theta)*np.sin(phi);
 
 
 
-@jit(nopython = True, cache = True, nogil=True)
+#@jit(nopython = True, cache = True, nogil=True)
 def dz2(r, theta, phi):
     a0 = 0.53;
     rho = 2*r/3/a0
@@ -51,7 +51,7 @@ def dz2(r, theta, phi):
     angular = np.sqrt(5/(16*np.pi))*(3*np.cos(theta)**2 - 1);
     return radial * angular;
 
-@jit(nopython = True, cache = True, nogil=True)
+#@jit(nopython = True, cache = True, nogil=True)
 def dxz(r, theta, phi):
     a0 = 0.53;
     rho = 2*r/3/a0
@@ -59,7 +59,7 @@ def dxz(r, theta, phi):
     angular = np.sqrt(15/(4*np.pi))*np.sin(theta)*np.cos(theta)*np.cos(phi);
     return radial * angular
 
-@jit(nopython = True, cache = True, nogil=True)
+#@jit(nopython = True, cache = True, nogil=True)
 def dyz(r, theta, phi):
     a0 = 0.53;
     rho = 2*r/3/a0
@@ -67,7 +67,7 @@ def dyz(r, theta, phi):
     angular = np.sqrt(15/(4*np.pi))*np.sin(theta)*np.cos(theta)*np.sin(phi)
     return radial * angular;
 
-@jit(nopython = True, cache = True, nogil=True)
+#@jit(nopython = True, cache = True, nogil=True)
 def dx2y2(r, theta, phi):
     a0 = 0.53;
     rho = 2*r/3/a0
@@ -75,7 +75,7 @@ def dx2y2(r, theta, phi):
     angular = np.sqrt(15/(16*np.pi))*np.sin(theta)**2*np.cos(2*phi)
     return radial * angular;
 
-@jit(nopython = True, cache = True, nogil=True)
+#@jit(nopython = True, cache = True, nogil=True)
 def dxy(r, theta, phi):
     a0 = 0.53;
     rho = 2*r/3/a0
@@ -85,7 +85,7 @@ def dxy(r, theta, phi):
 
 
 
-@jit(nopython = True, cache = True, nogil=True)
+#@jit(nopython = True, cache = True, nogil=True)
 def binatodeci(binary):
     return np.array([binary[i]*2**i for i in range(len(binary))]).sum();
 

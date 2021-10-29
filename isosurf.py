@@ -1,108 +1,70 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from Molecule import Molecule
 from wavefunctions import *
 from numba import njit
-import multiprocessing as mp
-import json
-import time
-import os
 
+class Isosurface:
+    def __init__(self):
+        pass
 
-def read_xyz(file):
-    points = [];
-    with open(file, "r") as f:
-        for l in f.readlines():
-            l = l.split();
-            if len(l) == 4:
-                points.append([float(i) for i in l[1:]]);
-    return np.array(points);
+    @staticmethod
+    def bezier(start, finish, n = 30) -> np.ndarray:
+        t = np.linspace(0, 1, n);
+        x = np.array([start, start, finish, finish]);
+        P = (1-t)**3*x[0] + 3*(1-t)**2*t*x[1] +3*(1-t)*t**2*x[2] + t**3*x[3];
+        return P; #Note that n plays the role of the frames
 
-def iso_find(p, a, field_func, ratios):
-    p, a = np.array(p), np.array(a);
-    d = p-a;
-    phi = np.arctan2(d[:,1], d[:,0]);
-    theta = np.arctan2(np.linalg.norm(d[:, :2], axis=1),d[:, 2]);
-    r = np.linalg.norm(d, axis = 1);
-    return (field_func(r, theta, phi)*ratios/np.linalg.norm(ratios)).sum();
+    @staticmethod
+    def iso_find2(r, a, field_func , ratios) -> float:
+        phi, theta = np.mgrid[.05:np.pi:30j, 0:np.pi*2:60j];
+        x, y, z = r*np.cos(phi)*np.sin(theta), r*np.sin(theta)*np.sin(phi), r*np.cos(theta);
+        x, y, z = [i.reshape(30, 60, 1) for i in (x, y, z)]
+        xyz = np.concatenate((x, y, z), axis = 2).reshape(-1, 1, 3); #All points in a sphere
+        d = xyz - a;
+        phi = np.arctan2(d[:, :, 1], d[:, :, 0])
+        theta = np.arctan2(np.linalg.norm(d[:, :, :2], axis=2), d[:, :, 2]);
+        r = np.linalg.norm(d, axis = 2)
+        values = (field_func(r, theta, phi)*ratios/np.linalg.norm(ratios)).sum(axis=1);
+        return max(abs(values.max()), abs(values.min()))
 
-def iso_find2(r, a, field_func , ratios):
-    phi, theta = np.mgrid[.05:np.pi:30j, 0:np.pi*2:60j];
-    x, y, z = r*np.cos(phi)*np.sin(theta), r*np.sin(theta)*np.sin(phi), r*np.cos(theta);
-    x, y, z = [i.reshape(30, 60, 1) for i in (x, y, z)]
-    xyz = np.concatenate((x, y, z), axis = 2).reshape(-1, 1, 3); #All points in a sphere
-    d = xyz - a;
-    phi = np.arctan2(d[:, :, 1], d[:, :, 0])
-    theta = np.arctan2(np.linalg.norm(d[:, :, :2], axis=2), d[:, :, 2]);
-    r = np.linalg.norm(d, axis = 2)
-    values = (field_func(r, theta, phi)*ratios/np.linalg.norm(ratios)).sum(axis=1);
-    return max(abs(values.max()), abs(values.min()))
-    
-#The isovalues for 0.9 probability of finding the electron are:
-    # 0.38 -> px, py, pz
-    # 0.02 -> 2S
-    # 0.10 -> 1S
+    @staticmethod
+    def apply_field(xyz, molecule, mat, orbital_func, inv = []) -> np.ndarray:
+        """
+        xyz: coordinates where field is evaluated 4d np.ndarray
+        molecule: coordinates of atoms 2d np.ndarray
+        mat: matrix applied to the molecule (such as a rotation)
+        orbital_func: function to be applied to the molecule to generate field
+        
+        returns 4d array with the following indices (atom, x, y, z, xyz) -> field value at cooresponding index in xyz
+        to get the overall field, add along dimension 0
+        """
+        d = xyz - (mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32);
+        dist = np.linalg.norm(d, axis = 4)
+        if len(inv) == 0:
+            try:
+                inv = np.linalg.inv(mat);
+            except:
+                if np.abs(mat[2, 2]) < 0.001:
+                    inv = np.linalg.inv(mat+np.random.rand(3, 3)+[[0,0,0],[0,0,0],[0,0,0.00001]])
+                elif np.abs(mat[1, 1]) < 0.001:
+                    inv = np.linalg.inv(mat+np.random.rand(3, 3)+[[0,0,0],[0,0.00001,0],[0,0,0]])
+                else:
+                    inv = np.linalg.inv(mat+np.random.rand(3, 3)+[[0.00001,0,0],[0,0,0],[0,0,0]])
+                print("Non_invertible_matrix!!!")
+                try:
+                    print(i)
+                except:
+                    None
+        d = (inv@d.reshape(-1, 3).T).T.reshape(*d.shape)
+        phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
+        theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2])
+        return orbital_func(dist, theta, phi)
 
-
-def make_mesh(name, directory = "molecule_data", radius_offset = 1, n = 10, mixed_orbitals = True):
-    data = Molecule.load_molecule_data("data_"+name+".json", directory);
-    molecule = read_xyz(data["xyz"]);
-    ratio_data = data["SALCS"]
-    parent_dir = os.path.join(os.getcwd(),f"images\\{name}");
-    keys = [a for a in ratio_data];
-    r = np.linalg.norm(molecule[np.abs(ratio_data[keys[0]]["2s"])>.1], axis = 1).max()+radius_offset;
-    X, Y, Z = np.mgrid[-r:r:(n*1j),-r:r:(n*1j),-r:r:(n*1j)];
-    x, y, z = [i.reshape(n, n, n, 1) for i in (X, Y, Z)];
-    xyz = np.concatenate((x, y, z), axis = 3).astype(np.float32);
-    d = xyz - molecule.reshape(-1, 1, 1, 1, 3).astype(np.float32);
-    dist = np.linalg.norm(d, axis = 4);
-    phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
-    theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2]);
-    if __name__ == "__main__":
-        with mp.Pool(2) as pool:
-            for irrep in ratio_data:
-                for orbital in ratio_data[irrep]:
-                    direc = os.path.join(parent_dir, irrep, orbital);
-                    ratios = np.array(ratio_data[irrep][orbital]);
-                    if np.abs(ratios).sum() == 0: continue;
-                    orbital_func = {"2s":S1, "x":P2x, "y":P2y, "z":P2z}[orbital];
-                    if mixed_orbitals:
-                        value = iso_find2(r*.95, molecule, orbital_func, ratios)
-                    else:
-                        value = iso_find2(r*.95, molecule[0][np.newaxis, :], orbital_func, ratios)
-                    s = time.time()
-                    print("Got to pool");
-                    print(irrep, orbital);
-                    if mixed_orbitals:
-                        scalarfield = (orbital_func(dist, theta, phi)*(ratios/np.linalg.norm(ratios)).reshape(-1, 1, 1, 1)).sum(axis = 0).astype(np.float32);
-                    else:
-                        print("USED THIS VERSION")
-                        scalarfield = (orbital_func(dist, theta, phi)*(ratios/np.linalg.norm(ratios)).reshape(-1, 1, 1, 1))
-                        scalarfield[np.abs(scalarfield)<value*.7] *= 0;
-                        scalarfield = scalarfield.sum(axis = 0).astype(np.float32);
-                    #v, f = marching_cubes(scalarfield, value, np.array(scalarfield.shape), xyz);
-                    #v2, f2 = marching_cubes(scalarfield, -value, np.array(scalarfield.shape), xyz);
-                    ((v, f), (v2, f2)) = pool.starmap(marching_cubes, ( (scalarfield, value, np.array(scalarfield.shape), xyz), (scalarfield, -value, np.array(scalarfield.shape), xyz) ));
-                    print(time.time() - s, "s to compute the isosurfaces");
-                    s = time.time();
-                    print("Got the triangles")
-                    if not os.path.exists(direc):
-                        os.makedirs(direc);
-                    j = os.path.join
-                    np.save(j(direc, "positive_v.npy"), v);
-                    np.save(j(direc, "positive_f.npy"), f);
-                    np.save(j(direc, "negative_v.npy"), v2);
-                    np.save(j(direc, "negative_f.npy"), f2);
-
-
-if __name__ == "__main__":
-    name= "benzene"
-    names = [o.replace("data_", "").replace(".json", "") for o in os.listdir("molecule_data") if o.endswith(".json")][8:]
-    for name in names:
-        make_mesh(name, "molecule_data", 2, 65, True); #This function fails because ivo's pytessel is not compatible with the latest python versions
-##fig = plt.figure();
-##ax = fig.add_subplot(projection = "3d");
-##ax.scatter(*triangles.T);
-##
-##plt.show()
+    @staticmethod
+    def generate_grid(r, n) -> np.ndarray:
+        """
+            returns 4d grid with points inside square of side length 2r and n points along each dimension (x,y,z)
+            indexing follows (x, y, z, [x,y,z])
+        """
+        X, Y, Z = np.mgrid[-r:r:(n*1j),-r:r:(n*1j),-r:r:(n*1j)];
+        x, y, z = [i.reshape(n, n, n, 1) for i in (X, Y, Z)];
+        return np.concatenate((x, y, z), axis = 3).astype(np.float32);

@@ -7,161 +7,23 @@ try:
 except:
     None;
 from PointGroup import PointGroup
+from skimage import measure
+from isosurf import Isosurface
+from BlenderHelper import *
 import numpy as np;
 import os;
 import json;
 import re;
 
-class Arrow:
-    def __init__(self, p1, p2, material = None, bodyW = 1/4, fracH = 1.5/5, ratioW = 1.5):
-        self.arrow = self.make_arrow(p1, p2, material, bodyW, fracH, ratioW);
-        
-    @classmethod
-    def make_arrow(self, p1, p2, material, bodyw, fracH, ratioW):
-        #body w is the fraction of the length which the radius of the cylinder has
-        p1, p2 = [np.array(p) for p in [p1, p2]];
-        r = p2 - p1;
-        l = np.linalg.norm(r); #Total length
-        l_body = l*(1-fracH);
-        l_head = l*fracH;
-        r_body = l_body*bodyw;
-        r_head = r_body*ratioW;
-        
-        axis = np.cross([0, 0, 1], r/l);
-        angle = np.arccos(np.dot([0, 0, 1], r/l));
-        quat = mathutils.Quaternion(axis.tolist(), angle);
-        
-        bpy.ops.mesh.primitive_cylinder_add(
-            radius = r_body, location = p1+r/l*l_body/2,
-            rotation = quat.to_euler(), depth = l_body);
-        body = bpy.context.active_object;
-        
-        bpy.ops.mesh.primitive_cone_add(
-            radius1 = r_head, depth = l_head, 
-            rotation = quat.to_euler(), location = p1+r/l*(l_body+l_head/2),);
-        head = bpy.context.active_object;
-        body.select_set(True);
-        
-        bpy.ops.object.mode_set(mode='OBJECT');
-        bpy.ops.object.join();
-        bpy.ops.object.origin_set(type="ORIGIN_CURSOR");
-        bpy.ops.object.shade_smooth();
-        
-        obj = bpy.context.active_object;
-        obj.data.use_auto_smooth = True;
-        
-        if material:
-            obj.active_material = material;
-        return obj;
-    
-    @classmethod
-    def make_arrow_material(self,axis = "x", color = None):
-        if bpy.data.materials.get(axis+"axis"):
-            return bpy.data.materials.get(axis+"axis");
-        #else 
-        bpy.data.materials.new(name = axis+"axis");
-        mat = bpy.data.materials.get(axis+"axis");
-        mat.use_nodes = True;
-        mat.node_tree.nodes["Principled BSDF"].inputs[7].default_value = .3;
-        addres = mat.node_tree.nodes["Principled BSDF"].inputs[0];
-        if not color:
-            if axis == "z":
-                addres.default_value = (0.2, 0.3, 0.7, 1);
-            elif axis == "x":
-                addres.default_value = (1, 0.19, 0.14, 1);
-            elif axis == "y":
-                addres.default_value = (0.04, 0.5, 0.22, 1);
-        return mat;
-    
-    @classmethod
-    def add_text(self, text = "x", location = [1.2,0,0], material = None, font = "georgia"):
-        font = bpy.data.fonts.load(rf"C:\Windows\Fonts\{font}.ttf");
-        font_curve = bpy.data.curves.new(type="FONT", name="Font Curve")
-        font_curve.body = text;
-        font_obj = bpy.data.objects.new(name="Font Object", object_data=font_curve);
-        font_obj.data.font = font;
-        bpy.context.scene.collection.objects.link(font_obj);
-        font_obj.location = mathutils.Vector(location);
-        
-        if material:
-            font_obj.active_material = material;
-        return font_obj;
-    
-    @classmethod
-    def coordinate_system(self, p=[0, 0, 0], l=1, kind = None, **kwargs):
-        if kind == "thic":
-            kwargs["fracH"]=1.5/5; kwargs["ratioW"]=1.5;
-            kwargs["bodyw"] = 1/4;
-        elif kind == "usual":
-            kwargs["fracH"]=1/5; kwargs["ratioW"]=2;
-            kwargs["bodyw"] = .5/7;
-        elif kind == "malnurished":
-            kwargs["fracH"]=.7/5; kwargs["ratioW"]=3;
-            kwargs["bodyw"] = .2/7;
-        else: #You are feeling lucky!
-            print("Ohohoho");
-        
-        print(kwargs)
-        p = np.array(p);
-        materials = [self.make_arrow_material(m) for m in "x y z".split()]
-        texts = [self.add_text(axisname, p+loc, mat) for axisname, loc, mat in zip(["x","y","z"], np.eye(3)*1.2*l, materials)]
-        arrowx = self.make_arrow(p, p+[l, 0, 0], materials[0], **kwargs);
-        arrowy = self.make_arrow(p, p+[0, l, 0], materials[1], **kwargs);
-        arrowz = self.make_arrow(p, p+[0, 0, l], materials[2], **kwargs);
-        
-        arrowx.select_set(True);
-        arrowy.select_set(True);    
-        bpy.ops.object.mode_set(mode='OBJECT');
-        bpy.ops.object.join();
-        bpy.ops.object.origin_set(type="ORIGIN_CURSOR");
-        
-        for t in texts:
-            t.select_set(True);
-        bpy.ops.object.parent_set(type="OBJECT");
-        return bpy.context.active_object, texts;
-    
-    @staticmethod
-    def hide_text(textobj):
-        textobj.hide_set(True)
-        textobj.hide_render = True;
-
-
-def hex2rgb(_hex,_tuple=False): #Ivos function.
-    """
-    @brief      Converts RGB code to numeric values
-
-    @param      angle  the hex code
-    @param      angle  whether to create a tuple
-
-    @return     Numeric color values
-    """
-    string = _hex.lstrip('#') # if hex color starts with #, remove # char
-    rgb255 = list(int(string[i:i+2], 16) for i in (0, 2 ,4))
-    rgb_r = rgb255[0]/255.0;
-    rgb_g = rgb255[1]/255.0;
-    rgb_b = rgb255[2]/255.0;
-    if _tuple == False:
-        return [rgb_r, rgb_g, rgb_b]
-    elif _tuple == True:
-        return (rgb_r, rgb_g, rgb_b, 1.0)
-
-def load_atoms_data(): 
-    with open("atoms.json", "r") as j_file:
-        return json.load(j_file);
-
-        
-
-class Atom:
+class Atom(Object):
     # The color and radii will be stored by the class for compatibility with old projects!
-    data = load_atoms_data();
-    radii_list = data["radii"];
-    colors = data["atoms"];
     def __init__(self, position = None, radius = None, material = None, name = None):
         """
             position: 1x3 matrix  with cartesian coordinates of the center of the atom
             radius: float with radius of the atom
             material: blender object with the material of the atom
             """
+        super().__init__();
         self.name = self.set_name(name);
         self.position = self.set_position(position);
         self.radius = self.set_radius(radius);
@@ -174,11 +36,6 @@ class Atom:
         #This makes it possible to specify the positions and such at a later stage after the creation of the atom
         setattr(self, attribute, argument);
 
-    def set_origin(self, obj, type = "ORIGIN_GEOMETRY"):
-        self.deselect_all()
-        self.select([obj])
-        self.set_active(obj)
-        bpy.ops.object.origin_set(type = type);
 
     def set_name(self, name):
         self.set(name, "name");
@@ -205,62 +62,14 @@ class Atom:
                 self.material = self.make_material(self.name);
         return self.material;
 
-    def makeAtomMesh(self):
-        if not self.material or not self.radius or type(self.position) == type(None):
-            return False;
-        bpy.ops.mesh.primitive_ico_sphere_add(radius=self.radius, location=self.position);
-        self.atomMesh = bpy.context.active_object;
-        self.atomMesh.active_material = self.material;
-        self.smooth_obj(self.atomMesh, modifier = True);
-        return self.atomMesh;
-
-    def render(self): #This function is overwritten for the Molecule class
-        return self.makeAtomMesh();
-
-    @staticmethod
-    def smooth_obj(obj, modifier = False):
-        bpy.ops.object.select_all(action='DESELECT');
-        obj.select_set(True);
-        bpy.context.view_layer.objects.active = obj;
-        bpy.ops.object.shade_smooth();
-        if modifier:
-            obj.modifiers.new("Smoother", "SUBSURF");
-            obj.modifiers["Smoother"].levels = 2;
-
-    def deselect_all(self):
-        bpy.ops.object.select_all(action="DESELECT");
-        bpy.context.view_layer.objects.active = None;
-
-    def set_active(self, obj):
-        bpy.context.view_layer.objects.active = obj;
-
-    def set_parent(self, parent, child):
-        self.deselect_all();
-        self.select([child, parent]);
-        self.set_active(parent);
-        bpy.ops.object.parent_set(type="OBJECT");
-
-    def set_parents(self, parent, children):
-        [self.set_parent(parent, child) for child in children];
-
-    def print_properties(self):
-        for p in self.__dict__:
-            print(p);
-            print(getattr(self, p));
-            print("\n");
-
 
     def make_material(cls, A):
-        print(A)
-        print(cls.colors[A])
-        print(hex2rgb(cls.colors[A], _tuple=True))
         """ A is the atom name. Each one has a different color"""
         if not bpy.data.materials.get(A):
             #Note that these colors were not generated by hand. That would have been suicide;
             m = bpy.data.materials.new(name=A);
             m.use_nodes = True;
             color = hex2rgb(cls.colors[A], _tuple=True)
-            print(color, cls.data["atoms"][A])
             m.node_tree.nodes["Principled BSDF"].inputs[0].default_value = color;
             m.node_tree.nodes["Principled BSDF"].inputs[7].default_value = .1;
         else:
@@ -341,50 +150,10 @@ class Molecule(Atom):
             self.mule = self.make_empty()
         except:
             None #Only works from inside blender, even though this class can be used outside
-
-    @staticmethod
-    def set_camera(
-        engine: str = "CYCLES",
-        samples: int = 60,
-        resolution_xy: (int, int) = (512, 512),
-        tile: (int, int) = (256, 256),
-        resolution_percentage: int = 100,
-        file_format: str = "PNG",
-        color_mode: str = "RGBA",
-        background_transparent: bool = True,
-        focal_length: float = 75,
-        camera_matrix: mathutils.Matrix = mathutils.Matrix([[0.707, -0.395, 0.586, 10.822], [0.707, 0.395, -0.586, -10.038], [0.0, 0.829, 0.559, 9.932], [0.0, 0.0, 0.0, 1.0]])
-        ) -> None:
-        bpy.data.scenes["Scene"].render.film_transparent = background_transparent;
-        bpy.context.scene.render.resolution_x = resolution_xy[0];
-        bpy.context.scene.render.resolution_y = resolution_xy[1];
-        bpy.context.scene.render.tile_x = tile[0];
-        bpy.context.scene.render.tile_y = tile[1];
-        bpy.context.scene.render.resolution_percentage = resolution_percentage;
-        bpy.data.scenes["Scene"].render.image_settings.file_format = file_format;
-        bpy.data.scenes["Scene"].render.image_settings.color_mode = color_mode;
-        bpy.data.cameras[0].lens = focal_length;
-        bpy.data.objects.get("Camera").matrix_world = camera_matrix;
         
-        
-
-    @staticmethod
-    def set_frame(frame):
-        bpy.data.scenes["Scene"].frame_current = frame;
+    
             
-    def make_outline_material(self):
-        if bpy.data.materials.get("AtomBondOutline"):
-            return bpy.data.materials.get("AtomBondOutline");
-        m = bpy.data.materials.new(name="AtomBondOutline");
-        m.use_nodes = True;
-        emmNode = m.node_tree.nodes.new(type="ShaderNodeEmission") # creates Emission shader node.
-        origNode = m.node_tree.nodes["Principled BSDF"];
-        OutputNode = m.node_tree.nodes["Material Output"]
-        m.node_tree.links.new(OutputNode.inputs[0], emmNode.outputs[0])
-        m.node_tree.nodes.remove(origNode);
-        emmNode.inputs[0].default_value = (0, 0, 0, 1);
-        m.use_backface_culling = True;
-        return m;
+
 
     def cartoonify(self, edgewidth = 0.03):
         """
@@ -396,7 +165,7 @@ class Molecule(Atom):
             
         for mesh_list in [self.atomMeshes, self.bondMeshes]:
             self.deselect_all();# Deselect everything
-            self.select(mesh_list); # Select the set of objects in question
+            self.select(*mesh_list); # Select the set of objects in question
             self.set_active(mesh_list[0]);
             bpy.ops.object.modifier_add(type = "SOLIDIFY");
             mesh_list[0].modifiers["Solidify"].thickness = edgewidth;
@@ -407,18 +176,6 @@ class Molecule(Atom):
             for ob in mesh_list:
                 for m in self.outline_materials:
                     ob.data.materials.append(m);            
-
-    @staticmethod
-    def unlink_obj(obj):
-        for collection in bpy.data.collections:
-            try:
-                bpy.context.scene.collection.objects.unlink(obj);
-            except:
-                None; #Sometimes an object is not part of a collection, which would throw an error.
-
-    @staticmethod                
-    def link_obj(obj, collection):
-        collection.objects.link(obj);
 
 
     @staticmethod
@@ -468,9 +225,9 @@ class Molecule(Atom):
         c_copy.matrix_world = mathutils.Matrix.Translation(-r*d)@c_copy.matrix_world;
         self.link_obj(c_copy, self.collection)
         self.deselect_all()
-        self.select([c, c_copy])
+        self.select(c, c_copy)
         if order == 3:
-            self.select([c, c_copy, c_copy2]);
+            self.select(c, c_copy, c_copy2);
         self.set_active(c)
         bpy.ops.object.join();#The double bond now occupies the same slot as the former single bond.
         bpy.ops.object.transform_apply(scale = True, location = False, rotation = False);
@@ -483,30 +240,6 @@ class Molecule(Atom):
         pair = np.array(pair)
         contains_connections = {*connections[np.any(pair[:, np.newaxis, np.newaxis] == connections, axis = (0,2)), :].flatten()}
         return np.array(list({*contains_connections}-{*pair}))
-
-
-    def make_collection(self, parent = None, name = None):
-        if not name:
-            name = self.name
-        if not parent:
-            if not bpy.data.collections.get(name):
-                bpy.data.collections.new(name  = name)
-                bpy.context.scene.collection.children.link(bpy.data.collections[name])
-            return bpy.context.scene.collection.children.get(name);
-        else:
-            if parent.children.get(name):
-                return parent.children.get(name);
-            bpy.data.collections.new(name = name);
-            parent.children.link(bpy.data.collections[name]);
-        return bpy.data.collections[name];
-        
-    @staticmethod
-    def copy_material(obj):
-        """
-        obj: blender object/mesh with an active material
-        return
-            copy of material for animation"""
-        return obj.active_material.copy()
 
     
     def find_static_atoms(self, matrix, tol = 2e-1): # Lower tolerances require better xyz files... But this is good enough for most purpuses
@@ -559,6 +292,12 @@ class Molecule(Atom):
                 self.orbital_matrices[i, :, :] = np.array(obj.matrix_world)
                 orbital_meshes.append(obj)
         return orbital_meshes
+    
+    def read_verts_and_faces(self, vertsfile, facesfile, directory = "ao_meshes"):
+        if directory:
+            vertsfile = os.path.join(directory, vertsfile)
+            facesfile = os.path.join(directory, facesfile)
+        return np.load(vertsfile), np.load(facesfile)
 
     def add_atomic_orbital(self, name = "2s", directory = "ao_meshes", offset = [0, 0, 0], atom_index = None, scale = 1, kind = "cloud", material_copy = False, small = True):
         """
@@ -612,13 +351,6 @@ class Molecule(Atom):
         self.orbital_names[atom_index] = name
         #self.orbital_matrices[-1][3, :3] = offset[:]
         return bpy.context.active_object
-
-    
-    def read_verts_and_faces(self, vertsfile, facesfile, directory = "ao_meshes"):
-        if directory:
-            vertsfile = os.path.join(directory, vertsfile)
-            facesfile = os.path.join(directory, facesfile)
-        return np.load(vertsfile), np.load(facesfile)
         
 
     def add_mesh(self, verts, faces, sign = "p", offset = [0, 0, 0], scale = 1): #p is "positive"
@@ -635,6 +367,35 @@ class Molecule(Atom):
         bpy.ops.object.shade_smooth()
         self.set_origin(new_object);
         return new_object;
+
+    def generate_isosurface(self, scalarfield, grid, isovalue, material_copy = True, center_origin= True):
+        """
+        Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
+        scalarfield: values of wavefunction in the corresponding places in the grid
+        grid: (n, n, n, 3) array with the positions where the wavefunction is evaluated
+        isovalue: float with the value where the isosurface is constructed
+        material_copy: boolean specifying if every orbital will have it's own instance of the material
+        join: boolean specifying if both positive and negative lobes are joined 
+        """
+        r = grid.max();
+        n = len(grid);
+        spacing = np.full(3, r*2/(n-1));
+       
+        self.deselect_all()
+        orbs = [];
+        for sign, val in zip(["p", "n"],[1, -1]):
+            isovalue*=val;
+            vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
+            orb = self.add_mesh(vertices - r, faces, sign)
+            orb.active_material = self.make_orbital_material(sign, copy = material_copy);
+            orbs.append(orb);
+        
+        self.select(*orbs)
+        self.set_active(orb);
+        bpy.ops.object.join();
+        if center_origin:
+            self.set_origin(orb);
+        return orb;
 
     def erase_MO(self, MO): #MO is the mesh of the orbital
         index = self.orbital_meshes.index(MO)
@@ -656,13 +417,6 @@ class Molecule(Atom):
         self.meshes = []
         self.mules = []
 
-    def delete_obj(self, obj):
-        self.deselect_all();
-        self.unhide(obj);
-        obj.select_set(True);
-        self.set_active(obj);
-        bpy.ops.object.delete(use_global = True);
-
     def set_names(self, atoms):
         self.names = [a.name for a in atoms];
         return self.names;
@@ -673,9 +427,6 @@ class Molecule(Atom):
             return name;
         self.name = "".join(self.names);
         return self.name;
-
-    def select(self, objs):
-        [obj.select_set(True) for obj in objs];
 
     def get_positions(self, atoms):
         return np.array([a.position for a in atoms]);
@@ -708,7 +459,6 @@ class Molecule(Atom):
             json.dump(data, f, ensure_ascii = False);
         
 
-
     #Now onto the rendering part
     def getBondRadius(self, rad):
         r = rad.mean()/2.3;
@@ -733,7 +483,9 @@ class Molecule(Atom):
             n_atoms = int(line1[:3])
             n_bonds = int(line1[3:6])
             lines = f.readlines()
+            print(n_atoms, n_bonds)
             for i,l in enumerate(lines):
+                print(i, l)
                 if i < n_atoms:
                     l = l.split()
                     atoms.append(l[3])
@@ -834,20 +586,7 @@ class Molecule(Atom):
         rad[np.array(self.names) == "H"] = 0.25
         return rad;
 
-    def scale_obj(self, obj, axes_factors, apply = False):
-        """
-            Scales the obj along defined axes.
-            Perfect for making bonds thinner along their xy planes.
-            """
-        if len(axes_factors) == 3:#The fourth dimension shall never be scaled!
-            axes_factors = [*axes_factors, 1];
-        self.deselect_all()
-        self.select([obj])
-        self.set_active(obj);
-        bpy.ops.transform.resize(value=axes_factors[:3], orient_type='LOCAL')
-        if apply:
-            bpy.ops.object.transform_apply(scale = True);
-        return obj;
+
 
     def make_cylinder_meshes(self, stick, prettify_radii = True, cartoonish = False):
         if type(self.connections) == type(None):
@@ -883,7 +622,7 @@ class Molecule(Atom):
                 c1.data.use_auto_smooth = True;
                 c0.active_material = m0;
                 c1.active_material = m1;
-                self.select([c0]);
+                self.select(c0);
                 bpy.ops.object.join();
             else:#We make a single long bond
                 c0 = self.cylinder_between(*p1, *p0, r);
@@ -904,7 +643,7 @@ class Molecule(Atom):
         if property == "Scale":
             property = "Scaling";
         self.deselect_all();
-        self.select(objs);
+        self.select(*objs);
         for obj in objs:
             self.set_active(obj);
             bpy.ops.anim.keyframe_insert_menu(type = property);
@@ -915,10 +654,9 @@ class Molecule(Atom):
         for a in self.atomMeshes:
             self.scale_obj(a, [stick_factor]*3, apply = apply);
 
-    def switch_render_engine(self, engine = "Cycles"):
-        bpy.data.scenes["Scene"].render.engine = engine;
+
     
-    def render(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False, stick_factor = 0.5):
+    def draw(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False, stick_factor = 0.5):
         """
             Creates all the meshes.
             mirror_options and rotaiton_axis_options are the arguments that can be suppplied
@@ -952,7 +690,7 @@ class Molecule(Atom):
             self.make_empty(True); # This objects parents the entire molecule. This way we can have unjoined meshes that all move together.
         else:
             self.deselect_all();
-            self.select(self.meshes+[self.mule]);
+            self.select(*self.meshes);
             self.set_active(self.mule);
             bpy.ops.object.parent_set(type="OBJECT");
             
@@ -962,7 +700,7 @@ class Molecule(Atom):
         if rotation_axis:
             self.make_rotation_axis(rotation_axis_options, prettify_radii = prettify_radii);
 
-    def render_mpl(self, ax):
+    def draw_mpl(self, ax):
         for b in self.connections:
             ax.plot(*(self.position[np.array(b)]).T, c = "black");
             
@@ -980,7 +718,7 @@ class Molecule(Atom):
         if not hasattr(self, "empty"): #The first created mule will parent all atoms and bonds
             self.empty = self.mule = e;
             self.deselect_all();
-            self.select(self.meshes+[e]);
+            self.select(*self.meshes, e);
             self.set_active(e);
             bpy.ops.object.parent_set(type="OBJECT");
         self.mules.append(e);
@@ -1010,20 +748,6 @@ class Molecule(Atom):
         self.position = self.position - np.array(self.position).mean(axis = 0)
         return self.position;
 
-    def rotate_about(self, axis, theta): # Used for experimenting with molecules.
-        axis, points = np.array(axis), self.position;
-        M = np.array(mathutils.Matrix.Rotation(theta, 3, axis));
-        return (M@points if len(points.shape) < 2 else (M@points.T).T);
-
-    def center_facet(self, face_indices, reference = "z"): #Was used to help orient molecules.
-        coordinates = self.position;
-        p1, p2, p3 = coordinates[np.array(face_indices[:3])];
-        v1, v2 = (p2 - p1), (p3 - p1);
-        normal = np.cross(v2, v1)/np.linalg.norm(np.cross(v1, v2));
-        axis = np.eye(3)[{"x":0, "y":1, "z":2}[reference]];
-        angle = np.arccos(np.dot(axis, normal));
-        self.position = self.rotate_about(np.cross(normal, axis), angle);
-        return self.position;
 
     @classmethod #Crude method of determing bonds based on their covalent radii. Works well on mol files but not xyz files.
     def detect_bonds(cls, coordinates, radii, ratio = 1.2, constant = None):
@@ -1131,18 +855,10 @@ class Molecule(Atom):
         self.meshes.append(self.rotation_axis)
         # self.hide(self.rotation_axis);
 
-    def hide(self, obj, hide_render = False):
-        obj.hide_set(True);
-        obj.hide_render = hide_render;
-
-    def unhide(self, obj, unhide_render = True):
-        obj.hide_set(False);
-        obj.hide_render = unhide_render;
-
 
     def rotation_to(self, v2, v1 = [0, 0, 1]):
         """
-        Rotation from v1 to v2
+        Rotation from v1 to v2 in quaternion mode 
         """
         v1, v2 = np.array(v1)/np.linalg.norm(v1), np.array(v2)/np.linalg.norm(v2);
         axis = np.cross(v1, v2);
@@ -1223,30 +939,6 @@ class Molecule(Atom):
         self.set_ending(tf);
         return tf; #Returns the end of this animation
 
-    def add_transition(self, property, obj, t0, transition, init, end):
-        self.deselect_all();
-        obj.select_set(True);
-        self.set_active(obj);
-        setattr(obj, property, init);
-        obj.keyframe_insert(data_path = property, frame = t0);
-        setattr(obj, property, end);
-        obj.keyframe_insert(data_path = property, frame = t0+transition);
-
-    def add_material_transition(self, property_name, obj, t0, transition, init, end, slot = "all"):
-        property_index = {"base_color": 0, "transmission": 15, "emission": 17, "alpha": 19}[property_name]
-        self.deselect_all()
-        obj.select_set(True)
-        self.set_active(obj)
-        for m in obj.material_slots:
-            if type(slot) == int:
-                if m != obj.material_slots[slot]:
-                    continue
-            material = m.material
-            imp = material.node_tree.nodes["Principled BSDF"].inputs[property_index]
-            imp.default_value = init
-            imp.keyframe_insert("default_value", frame = t0)
-            imp.default_value = end
-            imp.keyframe_insert("default_value", frame = t0 + transition)
             
 
     def animate_reflection(self, t0, normal, orbitals = "pz"):
@@ -1449,15 +1141,6 @@ class Molecule(Atom):
             os.makedirs(name);
         return name;
 
-    def angles_from_normals(self, normals):# In case we ever dicide to encode the angles in the form of the length of the normal vectors
-        angles = [];
-        for n in normals: #here the LIST of normals is referenced, not the normals!
-            if len(n)>0:
-                angles.append(np.linalg.norm(n[0])); #Note how the actual normal is extracted from the length
-            else:
-                angles.append(0);
-        return angles;
-
     def animate_properties(self, cc_list, normals, angles = [], target_directory = "Animation_files",t0 = 0, orbitals = "pz"):
         """
             Angles must be supplied as a list. Transformations which do not use angles should have a None on the list OR a 0
@@ -1518,7 +1201,7 @@ class Molecule(Atom):
            for frame in r:
                self.setup_dir(directs[ir]);
                bpy.context.scene.render.filepath = os.path.join(directs[ir], str(frame).zfill(zfill));
-               bpy.data.scenes["Scene"].frame_current = frame;
+               self.set_frame(frame);
                bpy.ops.render.render(use_viewport = True, write_still=True);
 
 
@@ -1531,5 +1214,5 @@ class Molecule(Atom):
                 None
         bpy.data.scenes["Scene"].render.image_settings.file_format = "PNG";
         bpy.context.scene.render.filepath = os.path.join(os.getcwd(), target_directory, self.name if not name else name);
-        bpy.data.scenes["Scene"].frame_current = 0;
+        self.set_frame(0);
         bpy.ops.render.render(use_viewport = True, write_still=True);
