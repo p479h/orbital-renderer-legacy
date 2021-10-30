@@ -388,7 +388,13 @@ class Molecule(Atom):
             pair = []
             for sign, val in zip(["p", "n"],[1, -1]):
                 isovalue*=val;
-                vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
+                try:
+                    vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
+                except: #If the isovalue is too high/low to begin with:
+                    vertices = np.array([[0, 0, 0]]);
+                    normals = np.array([]);
+                    faces = np.array([]);
+                    values = np.array([]);
                 orb = self.add_mesh(vertices - r, faces, sign)
                 orb.active_material = self.make_orbital_material(sign, copy = material_copy);    
                 pair.append(orb)
@@ -690,8 +696,6 @@ class Molecule(Atom):
         if cartoonish:
             self.cartoonify(edgewidth = .02);
             self.switch_render_engine("BLENDER_EEVEE");
-        else:
-            self.switch_render_engine("CYCLES");
 
         #These are used for animations
         if not hasattr(self, "mule"):
@@ -1208,12 +1212,12 @@ class Molecule(Atom):
                bpy.ops.render.render(use_viewport = True, write_still=True);
 
 
-    def render_image(self, target_directory = None, name = None, file_format = 'PNG', frame = 0):
+    def render_image(self, directory = None, name = None, file_format = 'PNG', frame = 0):
         if not name:
             name = str(frame).zfill(4);
-        if not target_directory:
-            target_directory = "."
+        if not directory:
+            directory = "."
         bpy.data.scenes["Scene"].render.image_settings.file_format = file_format;
-        bpy.context.scene.render.filepath = os.path.join(os.getcwd(), target_directory, name);
+        bpy.context.scene.render.filepath = os.path.join(os.getcwd(), directory, name);
         self.set_frame(frame);
         bpy.ops.render.render(use_viewport = True, write_still=True);

@@ -312,11 +312,12 @@ class Object:
         m.use_backface_culling = True;
         return m;
 
-    def delete_obj(self, obj):
-        self.deselect_all();
-        self.unhide(obj);
-        self.set_active(obj);
-        bpy.ops.object.delete(use_global = True);
+    def delete_obj(self, *objs):
+        for obj in objs:
+            self.deselect_all();
+            self.unhide(obj);
+            self.set_active(obj);
+            bpy.ops.object.delete(use_global = True);
         
 
     def scale_obj(self, obj, axes_factors, apply = False, orient_type = "LOCAL"):
