@@ -73,12 +73,10 @@ class Atom(Object):
             m.node_tree.nodes["Principled BSDF"].inputs[0].default_value = color;
             m.node_tree.nodes["Principled BSDF"].inputs[7].default_value = .1;
         else:
-            print("Material in data.materials", A)
             m = bpy.data.materials.get(A);
         return m;
 
     def make_orbital_material(self, sign, copy = True, ivo = False):
-        print("This function is getting called")
         A = {"p":"positive", "n": "negative"}[sign]
         try:
             bpy.data.materials.get(A)#So we can use this class without being in 
@@ -107,7 +105,6 @@ class Atom(Object):
             m.blend_method = "BLEND"
             m.show_transparent_back = False
         else:
-            print("Material in data.materials", A)
             m = bpy.data.materials.get(A);
         return m;
         
@@ -368,11 +365,11 @@ class Molecule(Atom):
         self.set_origin(new_object);
         return new_object;
 
-    def generate_isosurface(self, scalarfield, grid, isovalue, material_copy = True, center_origin= True):
+    def generate_isosurface(self, scalarfield, grid, isovalue, material_copy = True, center_origin= True, MO = True, join = True):
         """
         Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
         scalarfield: values of wavefunction in the corresponding places in the grid
-        grid: (n, n, n, 3) array with the positions where the wavefunction is evaluated
+        grid: (natoms, n, n, n, 3) array with the positions where the wavefunction is evaluated
         isovalue: float with the value where the isosurface is constructed
         material_copy: boolean specifying if every orbital will have it's own instance of the material
         join: boolean specifying if both positive and negative lobes are joined 
@@ -380,22 +377,35 @@ class Molecule(Atom):
         r = grid.max();
         n = len(grid);
         spacing = np.full(3, r*2/(n-1));
-       
-        self.deselect_all()
+        if MO:
+            scalarfields = scalarfield.sum(0, keepdims = True)
+        else:
+            scalarfields = scalarfield.copy();
         orbs = [];
-        for sign, val in zip(["p", "n"],[1, -1]):
-            isovalue*=val;
-            vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
-            orb = self.add_mesh(vertices - r, faces, sign)
-            orb.active_material = self.make_orbital_material(sign, copy = material_copy);
+        for scalarfield in scalarfields:
+            isovalue = abs(isovalue)
+            self.deselect_all()
+            pair = []
+            for sign, val in zip(["p", "n"],[1, -1]):
+                isovalue*=val;
+                vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
+                orb = self.add_mesh(vertices - r, faces, sign)
+                orb.active_material = self.make_orbital_material(sign, copy = material_copy);    
+                pair.append(orb)
+            self.select(*pair)
+            self.set_active(orb)
+            bpy.ops.object.join();
+            self.set_origin(orb);
             orbs.append(orb);
-        
         self.select(*orbs)
         self.set_active(orb);
-        bpy.ops.object.join();
+        if join:
+            bpy.ops.object.join();
         if center_origin:
             self.set_origin(orb);
-        return orb;
+        if join:
+            return orb;
+        return orbs;
 
     def erase_MO(self, MO): #MO is the mesh of the orbital
         index = self.orbital_meshes.index(MO)
@@ -483,9 +493,7 @@ class Molecule(Atom):
             n_atoms = int(line1[:3])
             n_bonds = int(line1[3:6])
             lines = f.readlines()
-            print(n_atoms, n_bonds)
             for i,l in enumerate(lines):
-                print(i, l)
                 if i < n_atoms:
                     l = l.split()
                     atoms.append(l[3])
@@ -930,8 +938,6 @@ class Molecule(Atom):
                 
             for mesh in fading_meshes:
                 #Initial fade out
-                print("Fading rotation");
-                print(mesh)
                 self.add_material_transition("alpha", mesh, t0 + t2, t2, 1, .5)
                 self.add_material_transition("alpha", mesh, t0 + tt + sp*2, t2, .5, 0)
                 self.add_material_transition("alpha", mesh, tf - t2, t2, 0, 1)
@@ -1045,9 +1051,6 @@ class Molecule(Atom):
             fading_meshes = [mesh for mesh in self.orbital_meshes if mesh not in meshes_in_place and mesh]
 
             t2 = int(tt/2)
-            print(meshes_in_place)
-            print(scales)
-            print(fading_meshes)
             for i, mesh in enumerate(meshes_in_place):
                 #Making them shine
                 self.add_material_transition("emission", mesh, t0 + t2, t2, (0, 0, 0, 1), (.2, .2, .2, 1))

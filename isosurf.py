@@ -27,42 +27,29 @@ class Isosurface:
         return max(abs(values.max()), abs(values.min()))
 
     @staticmethod
-    def apply_field(xyz, molecule, orbital_func, mat = np.eye(3), inv = [], SALC = []) -> np.ndarray:
+    def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
         """
         xyz: coordinates where field is evaluated 4d np.ndarray
         molecule: coordinates of atoms 2d np.ndarray
         mat: matrix applied to the molecule (such as a rotation)
         orbital_func: function to be applied to the molecule to generate field
+        orbital_orientation_function is a function which takes the position of each atom as an argument and returns a corresponding linear transformation for its orbital to be applied to it's field
         
         returns 4d array with the following indices (atom, x, y, z, xyz) -> field value at cooresponding index in xyz
         to get the overall field, add along dimension 0
         """
         if len(SALC) == 0:
             SALC = np.ones(len(molecule)).astype(np.float32);
-        d = xyz - (mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32);
+        orientation_matrices = np.array([np.linalg.inv(i) for i in map(orbital_orientation_function, molecule)])
+        grid_transformed = np.einsum("aef,abcdfe->abcde", orientation_matrices, (grid-molecule.reshape(-1, 1, 1, 1, 3))[..., np.newaxis])+molecule.reshape(-1, 1, 1, 1, 3)
+        d = grid_transformed - (molecule_mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32);
         dist = np.linalg.norm(d, axis = 4)
-        if len(inv) == 0:
-            try:
-                inv = np.linalg.inv(mat);
-            except:
-                if np.abs(mat[2, 2]) < 0.001:
-                    inv = np.linalg.inv(mat+np.random.rand(3, 3)+[[0,0,0],[0,0,0],[0,0,0.00001]])
-                elif np.abs(mat[1, 1]) < 0.001:
-                    inv = np.linalg.inv(mat+np.random.rand(3, 3)+[[0,0,0],[0,0.00001,0],[0,0,0]])
-                else:
-                    inv = np.linalg.inv(mat+np.random.rand(3, 3)+[[0.00001,0,0],[0,0,0],[0,0,0]])
-                print("Non_invertible_matrix!!!")
-                try:
-                    print(i)
-                except:
-                    None
-        d = (inv@d.reshape(-1, 3).T).T.reshape(*d.shape)
         phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
         theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2])
-        return orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
+        return (orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1))[SALC!=0]
 
     @staticmethod
-    def generate_grid(r, n) -> np.ndarray:
+    def generate_grid(r: float, n: int) -> np.ndarray:
         """
             returns 4d grid with points inside square of side length 2r and n points along each dimension (x,y,z)
             indexing follows (x, y, z, [x,y,z])
