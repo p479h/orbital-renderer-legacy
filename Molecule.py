@@ -1205,14 +1205,12 @@ class Molecule(Atom):
                bpy.ops.render.render(use_viewport = True, write_still=True);
 
 
-    def render_image(self, target_directory, name = None, hide = True):
-        if hide:
-            try:
-                self.hide(self.mirror, hide_render = True);
-                self.hide(self.rotation_axis, hide_render = True);
-            except:
-                None
-        bpy.data.scenes["Scene"].render.image_settings.file_format = "PNG";
-        bpy.context.scene.render.filepath = os.path.join(os.getcwd(), target_directory, self.name if not name else name);
-        self.set_frame(0);
+    def render_image(self, target_directory = None, name = None, file_format = 'PNG', frame = 0):
+        if not name:
+            name = str(frame).zfill(4);
+        if not target_directory:
+            target_directory = "."
+        bpy.data.scenes["Scene"].render.image_settings.file_format = file_format;
+        bpy.context.scene.render.filepath = os.path.join(os.getcwd(), target_directory, name);
+        self.set_frame(frame);
         bpy.ops.render.render(use_viewport = True, write_still=True);

@@ -27,7 +27,7 @@ class Isosurface:
         return max(abs(values.max()), abs(values.min()))
 
     @staticmethod
-    def apply_field(xyz, molecule, mat, orbital_func, inv = []) -> np.ndarray:
+    def apply_field(xyz, molecule, orbital_func, mat = np.eye(3), inv = [], SALC = []) -> np.ndarray:
         """
         xyz: coordinates where field is evaluated 4d np.ndarray
         molecule: coordinates of atoms 2d np.ndarray
@@ -37,6 +37,8 @@ class Isosurface:
         returns 4d array with the following indices (atom, x, y, z, xyz) -> field value at cooresponding index in xyz
         to get the overall field, add along dimension 0
         """
+        if len(SALC) == 0:
+            SALC = np.ones(len(molecule)).astype(np.float32);
         d = xyz - (mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32);
         dist = np.linalg.norm(d, axis = 4)
         if len(inv) == 0:
@@ -57,7 +59,7 @@ class Isosurface:
         d = (inv@d.reshape(-1, 3).T).T.reshape(*d.shape)
         phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
         theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2])
-        return orbital_func(dist, theta, phi)
+        return orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
 
     @staticmethod
     def generate_grid(r, n) -> np.ndarray:
