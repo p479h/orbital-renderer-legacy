@@ -329,6 +329,7 @@ class Molecule(Atom):
         else:
             scalarfields = scalarfield.copy();
         orbs = [];
+        self.deselect_all()
         for scalarfield in scalarfields:
             orb = self.generate_isosurface(scalarfield, grid, isovalue, material_copy, center_origin);
             orbs.append(orb);
@@ -356,7 +357,7 @@ class Molecule(Atom):
         orb = self.make_orbital(scalarfield, grid, isovalue, **kwargs);
         orb.location = position
         if type(atom_index) == int:
-            self.set_parent(self.mule, orb)
+            self.set_parent(self.atomMeshes[atom_index], orb)
             self.orbital_meshes[atom_index] = orb
             self.meshes.append(orb)
             self.orbital_names[atom_index] = "Not None"

@@ -184,9 +184,9 @@ class Object:
         
     def set_parent(self, parent, child):
         self.deselect_all();
-        self.select(child, parent);
+        self.select(parent, child);
         self.set_active(parent);
-        bpy.ops.object.parent_set(type="OBJECT");
+        bpy.ops.object.parent_set(type="OBJECT", keep_transform = True);
 
     @staticmethod
     def set_frame(frame):
