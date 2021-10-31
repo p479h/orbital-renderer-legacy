@@ -267,89 +267,8 @@ class Molecule(Atom):
         final_orientations = np.einsum('ij,kjl->kil',mat,self.orbital_matrices);
         projection = (self.orbital_matrices*final_orientations).sum(axis = 1)[:,{"px":0, "x":0,"py":1, "y":1,"pz":2, "z":2}[orb]]
         return remaining*projection #We multiply by remaining because the orbitals that leave their atoms must be set to 0
-        
-    def add_SALC(self, orbitals, SALC, norm = True, orientation_function = None, *args, **kwargs):
-        """
-            Receives a list of coefficients per atomic index
-            non-zero coefficients will be used to construct atomic orbitals. The coefficients will act scaling the orbitals
-            norm is a boolean used to make the size of the orbitals more visually appealing
-            orientation_function is a function that takes in coordinates ([xyz]) and uses those to construct a rotation_matrix to apply to the unit vectors of the world matrix of the orbital in blender! You would use this for xyz orbitals of an Oh symmetric molecule for example
-            """
-        orbital_meshes = []
-        if norm:
-            SALC = np.array(SALC)
-            SALC = SALC / np.abs(SALC).max()
-            SALC[SALC !=0 ] = SALC[SALC !=0 ] / np.abs(SALC[SALC !=0 ])**.3 # Dividing by the actual maxima can lead to very disproportional orbitals
-        for i, coeff in enumerate(SALC):
-            if np.abs(coeff) > 1e-4: # Due to numerical errors we may end up with 1e-4 to 1e-6 where there should be 0 in the salcs
-                obj = self.add_atomic_orbital(orbitals[i] if type(orbitals) == list else orbitals, atom_index = i, scale = coeff, *args, **kwargs)
-                self.set_parent(self.mule, obj)
-                if orientation_function:
-                    obj.matrix_world[:3, :3] = mathutils.Matrix(orientation_function(self.position[i]))@obj.matrix_world[:3, :3]
-                self.orbital_matrices[i, :, :] = np.array(obj.matrix_world)
-                orbital_meshes.append(obj)
-        return orbital_meshes
     
-    def read_verts_and_faces(self, vertsfile, facesfile, directory = "ao_meshes"):
-        if directory:
-            vertsfile = os.path.join(directory, vertsfile)
-            facesfile = os.path.join(directory, facesfile)
-        return np.load(vertsfile), np.load(facesfile)
-
-    def add_atomic_orbital(self, name = "2s", directory = "ao_meshes", offset = [0, 0, 0], atom_index = None, scale = 1, kind = "cloud", material_copy = False, small = True):
-        """
-        Adds atomic orbital to molecule at specified position.
-        data comes from .npy file in specified directory and one may choose to provide the location of the orbital OR the index where it resides.
-        kind means arrow or cloud
-        copy = True will use the same material for all orbitals (Harder to animate)
-        copy = False will use a separate material for each orbital (colors can be animated)
-        """
-        meshes = []
-        if type(atom_index) == int:
-            offset = self.position[atom_index]
-            self.orbital_indices[atom_index] = True;
-            self.orbital_kinds[atom_index] = kind;
-        for sign in ["p", "n"]:
-            if not small:
-                vertsfile = f"{name}_v_{sign}.npy"
-                facesfile = f"{name}_f_{sign}.npy"
-            else:
-                try:
-                    vertsfile = f"c_{name}_v_{sign}.npy"
-                    facesfile = f"c_{name}_f_{sign}.npy"
-                except:
-                    vertsfile = f"{name}_v_{sign}.npy"
-                    facesfile = f"{name}_f_{sign}.npy"
-            if kind == "cloud":
-                verts, faces = self.read_verts_and_faces(vertsfile, facesfile, directory)
-                meshes.append(self.add_mesh(verts, faces, sign, offset, scale))
-            elif kind == "arrow":
-                l = scale*.75
-                p0, p1 = np.array(offset) + [[0, 0, -l],[0, 0, l*1.2]]
-                wid = self.radius.mean()/8
-                meshes.append(Arrow(p0, p1, None, wid, .15, 1.8).arrow)
-                if name == "px":
-                    bpy.ops.transform.rotate(value = -np.pi/2, orient_axis = "Y")
-                if name == "py":
-                    bpy.ops.transform.rotate(value = np.pi/2, orient_axis = "X")
-            else:
-                raise("Kind of orbital is not recognized")
-            if sign:
-                meshes[-1].active_material = self.make_orbital_material(sign, copy = material_copy);
-            if kind == "arrow":
-                break
-        [o.select_set(True) for o in meshes]
-        if len(meshes)>1:
-            self.set_active(meshes[0])
-            bpy.ops.object.join()
-        self.orbital_meshes[atom_index] = bpy.context.view_layer.objects.active
-        self.set_origin(bpy.context.view_layer.objects.active);
-        self.meshes.append(self.orbital_meshes[atom_index])
-        self.orbital_names[atom_index] = name
-        #self.orbital_matrices[-1][3, :3] = offset[:]
-        return bpy.context.active_object
         
-
     def add_mesh(self, verts, faces, sign = "p", offset = [0, 0, 0], scale = 1): #p is "positive"
         """
             makes a mesh from verts and faces"""
@@ -365,7 +284,38 @@ class Molecule(Atom):
         self.set_origin(new_object);
         return new_object;
 
-    def generate_isosurface(self, scalarfield, grid, isovalue, material_copy = True, center_origin= True, MO = True, join = True):
+    def generate_isosurface(self, scalarfield, grid, isovalue, material_copy = True, center_origin = True):
+        """
+        Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
+        scalarfield: values of wavefunction in the corresponding places in the grid
+        grid: (natoms, n, n, n, 3) array with the positions where the wavefunction is evaluated
+        isovalue: float with the value where the isosurface is constructed
+        material_copy: boolean specifying if every orbital will have it's own instance of the material
+        """
+        self.deselect_all()
+        pair = []
+        r = grid.max();
+        n = len(grid);
+        spacing = np.full(3, r*2/(n-1));
+        for sign, val in zip(["p", "n"],[1, -1]):
+            isovalue*=val;
+            try:
+                vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
+            except: #If the isovalue is too high/low to begin with:
+                vertices = np.array([[0, 0, 0]]);
+                normals = np.array([]);
+                faces = np.array([]);
+                values = np.array([]);
+            orb = self.add_mesh(vertices - r, faces, sign)
+            orb.active_material = self.make_orbital_material(sign, copy = material_copy);    
+            pair.append(orb)
+        self.select(*pair)
+        self.set_active(orb)
+        bpy.ops.object.join();
+        self.set_origin(orb);
+        return orb
+
+    def make_orbital(self, scalarfield, grid, isovalue, material_copy = True, center_origin = True, MO = True, join = True):
         """
         Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
         scalarfield: values of wavefunction in the corresponding places in the grid
@@ -374,34 +324,13 @@ class Molecule(Atom):
         material_copy: boolean specifying if every orbital will have it's own instance of the material
         join: boolean specifying if both positive and negative lobes are joined 
         """
-        r = grid.max();
-        n = len(grid);
-        spacing = np.full(3, r*2/(n-1));
         if MO:
             scalarfields = scalarfield.sum(0, keepdims = True)
         else:
             scalarfields = scalarfield.copy();
         orbs = [];
         for scalarfield in scalarfields:
-            isovalue = abs(isovalue)
-            self.deselect_all()
-            pair = []
-            for sign, val in zip(["p", "n"],[1, -1]):
-                isovalue*=val;
-                try:
-                    vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
-                except: #If the isovalue is too high/low to begin with:
-                    vertices = np.array([[0, 0, 0]]);
-                    normals = np.array([]);
-                    faces = np.array([]);
-                    values = np.array([]);
-                orb = self.add_mesh(vertices - r, faces, sign)
-                orb.active_material = self.make_orbital_material(sign, copy = material_copy);    
-                pair.append(orb)
-            self.select(*pair)
-            self.set_active(orb)
-            bpy.ops.object.join();
-            self.set_origin(orb);
+            orb = self.generate_isosurface(scalarfield, grid, isovalue, material_copy, center_origin);
             orbs.append(orb);
         self.select(*orbs)
         self.set_active(orb);
@@ -412,6 +341,42 @@ class Molecule(Atom):
         if join:
             return orb;
         return orbs;
+
+    def make_atomic_orbital(self, position, isovalue, orbital_func, r, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, **kwargs):
+        """
+            Makes an atomic orbital at specified position
+            if atom_index is provided, data is incorporated into the object and it can be animated.
+            """
+        grid = Isosurface.generate_grid(r, n)
+        scalarfield = Isosurface.apply_field(grid, 
+            np.zeros((1, 3)), 
+            orbital_func, 
+            SALC = [1],
+            orbital_orientation_function = orbital_orientation_function)
+        orb = self.make_orbital(scalarfield, grid, isovalue, **kwargs);
+        orb.location = position
+        if type(atom_index) == int:
+            self.set_parent(self.mule, orb)
+            self.orbital_meshes[atom_index] = orb
+            self.meshes.append(orb)
+            self.orbital_names[atom_index] = "Not None"
+        return orb
+    
+    def make_atomic_orbitals(self, isovalue, orbital_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
+        """
+            Adds an atomic orbital to the mesh for each orbital where coeff in coeffs != 0
+            """
+        if len(coeffs) == 0:
+            coeffs = np.ones(len(self.position))
+        orbs = []
+        for i, p in enumerate(self.position):
+            if coeffs[i] == 0: continue
+            orb = self.make_atomic_orbital(p, isovalue, orbital_func, r, n, atom_index = i, MO = False, **kwargs);
+            orb.scale = [scale]*3
+            self.set_active(orb)
+            bpy.ops.object.transform_apply(location = False, rotation = False, scale = True)
+            orbs.append(orb)
+        return orbs
 
     def erase_MO(self, MO): #MO is the mesh of the orbital
         index = self.orbital_meshes.index(MO)

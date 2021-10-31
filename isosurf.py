@@ -46,7 +46,7 @@ class Isosurface:
         dist = np.linalg.norm(d, axis = 4)
         phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
         theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2])
-        return (orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1))[SALC!=0]
+        return orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
 
     @staticmethod
     def generate_grid(r: float, n: int) -> np.ndarray:
