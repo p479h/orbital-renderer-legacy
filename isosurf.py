@@ -26,6 +26,11 @@ class Isosurface:
         values = (field_func(r, theta, phi)*ratios/np.linalg.norm(ratios)).sum(axis=1);
         return max(abs(values.max()), abs(values.min()))
 
+    @classmethod
+    def iso_find_mean(cls, grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> float:
+        return np.abs(cls.apply_field(grid, molecule, orbital_func, molecule_mat, inv, SALC, orbital_orientation_function)).mean();
+        
+
     @staticmethod
     def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
         """
