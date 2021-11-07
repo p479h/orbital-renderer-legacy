@@ -701,6 +701,8 @@ class Molecule(Atom):
             bpy.ops.object.parent_set(type="OBJECT");
         self.mules.append(e);
         e.rotation_mode = "QUATERNION";
+        self.unlink_obj(self.mule)
+        self.link_obj(self.mule, self.collection)
         return e;
 
 

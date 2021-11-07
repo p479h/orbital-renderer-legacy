@@ -3,6 +3,7 @@ from wavefunctions import *
 from skimage.measure import marching_cubes
 from scipy.optimize import minimize, brute
 from numba import njit
+import time
 
 class Isosurface:
     def __init__(self):
@@ -37,7 +38,7 @@ class Isosurface:
         return (np.abs(cls.apply_field(grid, molecule, orbital_func, molecule_mat, inv, SALC, orbital_orientation_function))**.5).mean()**2;
 
     @classmethod
-    def iso_find_vert(cls, Npoints, grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> float:
+    def iso_find_vert(cls, Npoints, grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3), resolution = 100) -> float:
         scalarfield = cls.apply_field(grid, molecule, orbital_func, molecule_mat=molecule_mat, inv=inv, SALC=SALC, orbital_orientation_function = orbital_orientation_function)
         r = grid.max();
         n = len(grid);
@@ -48,12 +49,13 @@ class Isosurface:
                 n_points = len(vertices)
             except Exception as f:
                 n_points = -1;
-                return-1
-            return np.abs(n_points-Npoints)
-        iso_guesses = np.linspace(0, 1, 300).reshape(-1, 1);
+            return n_points
+        iso_guesses = np.linspace(0, 1, resolution).reshape(-1, 1);
         counts = np.array([errorFunc(i) for i in iso_guesses])
         lims = iso_guesses[counts>0, :].min(), iso_guesses[counts>0, :].max()
-        return brute(errorFunc, ranges = [lims], Ns = 10)[0]
+        iso_guesses2 = np.linspace(*lims, resolution).reshape(-1, 1);
+        counts = np.array([errorFunc(i) for i in iso_guesses2])
+        return iso_guesses2[np.argmin(np.abs(counts - Npoints))]
 
     @staticmethod
     def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
