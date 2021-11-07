@@ -616,6 +616,7 @@ class Molecule(Atom):
             self.meshes.append(obj);
             self.unlink_obj(obj)
             self.link_obj(obj, self.bond_collection)
+            self.set_origin(obj)
 
     def keyframe_state(self, objs, property = "all"):
         if property == "all":
@@ -699,10 +700,10 @@ class Molecule(Atom):
             self.select(*self.meshes, e);
             self.set_active(e);
             bpy.ops.object.parent_set(type="OBJECT");
+            self.unlink_obj(self.mule)
+            self.link_obj(self.mule, self.collection)
         self.mules.append(e);
         e.rotation_mode = "QUATERNION";
-        self.unlink_obj(self.mule)
-        self.link_obj(self.mule, self.collection)
         return e;
 
 
