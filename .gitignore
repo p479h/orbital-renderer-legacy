@@ -2,3 +2,4 @@
 mesh_frames
 mesh_frames\*.png
 *.png
+__pycache__
