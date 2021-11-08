@@ -3,4 +3,5 @@ mesh_frames
 mesh_frames\*.png
 *.png
 scenes
+scenes\*
 __pycache__
