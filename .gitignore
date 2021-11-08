@@ -2,4 +2,5 @@
 mesh_frames
 mesh_frames\*.png
 *.png
+scenes
 __pycache__
