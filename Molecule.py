@@ -373,7 +373,7 @@ class Molecule(Atom):
         for i, p in enumerate(self.position):
             if coeffs[i] == 0: continue
             orb = self.make_atomic_orbital(p, isovalue, orbital_func, r, n, atom_index = i, MO = False, **kwargs);
-            orb.scale = [scale]*3
+            orb.scale = [scale*coeffs[i]/abs(coeffs[i])]*3
             self.set_active(orb)
             bpy.ops.object.transform_apply(location = False, rotation = False, scale = True)
             orbs.append(orb)
@@ -623,6 +623,10 @@ class Molecule(Atom):
             property = "LocRotScale";
         if property == "Scale":
             property = "Scaling";
+        try:
+            objs[0]
+        except:
+            objs = (objs,)
         self.deselect_all();
         self.select(*objs);
         for obj in objs:
