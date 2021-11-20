@@ -9,13 +9,13 @@ except:
 from PointGroup import PointGroup
 from skimage import measure
 from isosurf import Isosurface
-from BlenderHelper import *
+from Bobject import *
 import numpy as np;
 import os;
 import json;
 import re;
 
-class Atom(Object):
+class Atom(Bobject):
     # The color and radii will be stored by the class for compatibility with old projects!
     def __init__(self, position = None, radius = None, material = None, name = None):
         """

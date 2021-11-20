@@ -151,7 +151,7 @@ def load_atoms_data():
         return json.load(j_file);
 
 
-class Object:
+class Bobject: #Blender object 
     data = load_atoms_data();
     radii_list = data["radii"];
     colors = data["atoms"];
