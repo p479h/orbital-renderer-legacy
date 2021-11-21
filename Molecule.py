@@ -141,17 +141,40 @@ class Molecule(Atom):
         self.orbital_matrices = np.tile(np.eye(4), (len(self.position), 1, 1)); #Matrices of molecular orbitals
         self.orbital_names = [None for i in range(len(self.position))];
         self.orbital_kinds = [None for i in range(len(self.position))];
-        try:
-            self.mule = self.make_empty()
-        except:
-            None #Only works from inside blender, even though this class can be used outside
         
     
     def translate(self, v):
-        if hasattr(self, "empty"):
-            self.empty.location = self.empty.location + mathutils.Vector(v)
+        """
+            Translates the molecule by v"""
+        if hasattr(self, "mule"):
+            self.translate_obj(self.mule, v)
         else:
             self.position += v;
+        return self
+
+    def scale(self, v):
+        """
+            scales the molecule by v"""
+        if hasattr(self, "mule"):
+            self.scale_obj(self.mule, v)
+        else:
+            self.position*=v;
+        return self
+
+    def rotate(self, angle, axis = [0, 0, 1]):
+        """
+            rotates the molecule by angle about axis
+            if using quaternion, angle should be a float or int.
+            if using Euler, angle should be a tuple or list."""
+        if hasattr(self, "mule"):
+            self.rotate_obj(self.mule, angle, axis)
+        else:
+            #We apply the rotation to the atoms directly
+            rotMat = np.array(
+                mathutils.Matrix.Rotation(angle, 3, axis)
+                )
+            self.position = np.einsum('bc,ac->ab', rotMat, self.position)
+        return self
 
 
     def cartoonify(self, edgewidth = 0.03):
@@ -202,6 +225,7 @@ class Molecule(Atom):
         c = self.bondMeshes[bond_index];
         scale = .55 if len(neighbour_indices) == 2 else 0.4;
         self.scale_obj(c, [scale, scale, 1]);
+        self.apply_transform(c, scale = True)
         cmat = np.array(c.matrix_world); #The unit vectors present here need to be used later.
         rad = self.cylinderRadii[bond_index];
         d = rad/2.1
@@ -577,9 +601,11 @@ class Molecule(Atom):
 
     def dieting(self, stick_factor, apply = True):
         for b in self.bondMeshes:
-            self.scale_obj(b, [*[stick_factor]*2, 1], apply = apply);
+            self.scale_obj(b, [*[stick_factor]*2, 1]);
+            self.apply_transform(b, scale = apply)
         for a in self.atomMeshes:
-            self.scale_obj(a, [stick_factor]*3, apply = apply);
+            self.scale_obj(a, [stick_factor]*3);
+            self.apply_transform(a, scale = apply)
 
 
     
@@ -593,6 +619,8 @@ class Molecule(Atom):
             supplied as a dictionary.
             stick means stick and ball model. It is used to give emphasis to the orbitals instead of atoms themselves
         """
+        self.mule = self.make_empty()
+        
         self.make_atom_meshes(stick, prettify_radii = prettify_radii);
         self.make_cylinder_meshes(stick, prettify_radii = prettify_radii, cartoonish = cartoonish);
 

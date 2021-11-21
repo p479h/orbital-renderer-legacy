@@ -320,18 +320,62 @@ class Bobject: #Blender object
             bpy.ops.object.delete(use_global = True);
         
 
-    def scale_obj(self, obj, axes_factors, apply = False, orient_type = "LOCAL"):
+    @classmethod
+    def translate_obj(cls, obj, v):
         """
-            Scales the obj along defined axes.
-            Perfect for making bonds thinner along their xy planes.
-            LOCAL, GLOBAL... 
-            """
-        self.deselect_all()
-        self.set_active(obj);
-        bpy.ops.transform.resize(value=axes_factors[:3], orient_type=orient_type)
-        if apply:
-            bpy.ops.object.transform_apply(scale = True);
-        return obj;
+            Translates the molecule by v"""
+        obj.location = obj.location + mathutils.Vector(v)
+        return obj
+
+    @classmethod
+    def scale_obj(cls, obj, v):
+        """
+            scales the molecule by v"""
+        if type(v) == int or type(v) == float:
+            v = [v]*3
+        obj.scale = obj.scale * mathutils.Vector(v)
+        return obj
+        
+    @classmethod
+    def rotate_obj(cls, obj, angle, axis = [0, 0, 1]):
+        """
+            rotates the molecule by angle about axis
+            if using quaternion, angle should be a float or int.
+            if using Euler, angle should be a tuple or list."""
+        rmode = obj.rotation_mode
+        if rmode == "QUATERNION":
+            obj.rotation_quaternion.rotate(mathutils.Quaternion(axis, angle))
+        else:
+            obj.rotation_euler.rotate(mathutils.Euler(angle, mode))
+        return obj
+
+    @classmethod
+    def apply_transform(cls, ob, location=False, rotation=False, scale=False):
+        Matrix = mathutils.Matrix
+        mb = ob.matrix_basis
+        I = Matrix()
+        loc, rot, scale = mb.decompose()
+        
+        T = Matrix.Translation(loc)
+        R = mb.to_3x3().normalized().to_4x4()
+        S = Matrix.Diagonal(scale).to_4x4()
+
+        transform = [I, I, I]
+        basis = [T, R, S]
+
+        def swap(i):
+            transform[i], basis[i] = basis[i], transform[i]
+        swaps = [location, rotation, scale]
+        [swap(i) for i, b in enumerate(swaps) if b] #apply the swaps
+            
+        M = transform[0] @ transform[1] @ transform[2]
+        if hasattr(ob.data, "transform"):
+            ob.data.transform(M)
+        for c in ob.children:
+            c.matrix_local = M @ c.matrix_local
+            
+        ob.matrix_basis = basis[0] @ basis[1] @ basis[2]
+            
     
     def hide(self, obj, hide_render = False):
         obj.hide_set(True);
