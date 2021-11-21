@@ -277,17 +277,17 @@ class Bobject: #Blender object
             else:
                 name = "obj";
                 self.name = name;
-        if not parent:
+        if not parent: #If there is no parent we just make the collection
             if not bpy.data.collections.get(name):
-                bpy.data.collections.new(name  = name)
-                bpy.context.scene.collection.children.link(bpy.data.collections[name])
-            return bpy.context.scene.collection.children.get(name);
+                c = bpy.data.collections.new(name  = name);
+                bpy.context.scene.collection.children.link(c)
+            return c;
         else:
-            if parent.children.get(name):
+            if parent.children.get(name):#Else we make the collection under that parent
                 return parent.children.get(name);
-            bpy.data.collections.new(name = name);
-            parent.children.link(bpy.data.collections[name]);
-        return bpy.data.collections[name];
+            c = bpy.data.collections.new(name = name);
+            parent.children.link(c);
+            return c
 
     @staticmethod
     def copy_material(obj):
