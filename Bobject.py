@@ -232,7 +232,7 @@ class Bobject: #Blender object
     def unlink_obj(obj):
         for collection in bpy.data.collections:
             try:
-                bpy.context.scene.collection.objects.unlink(obj);
+                collection.objects.unlink(obj);
             except:
                 None; #Sometimes an object is not part of a collection, which would throw an error.
 
@@ -312,12 +312,24 @@ class Bobject: #Blender object
         m.use_backface_culling = True;
         return m;
 
-    def delete_obj(self, *objs):
+
+    def delete_obj(self, *objs, delete_collection = True):
+        """
+            deletes objs
+            if delete_collection == True, the empty collections linked to the object that is about to be deleted are deleted as well"""
         for obj in objs:
+            collections = obj.users_collection
             self.deselect_all();
             self.unhide(obj);
             self.set_active(obj);
+            print(collections)
             bpy.ops.object.delete(use_global = True);
+            print(collections)
+            if delete_collection:
+                for c in collections:
+                    if len(c.objects) == 0:
+                        bpy.data.collections.remove(c)
+            
         
 
     @classmethod
