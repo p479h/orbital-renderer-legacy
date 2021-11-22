@@ -50,12 +50,7 @@ class FileManager:
         bonds = []
         orders = []
         with open(path, "r") as f:
-            i = 0;
-            while i<100: #Some mol files start with blank lines
-                if f.readline()[1:4].isalpha():
-                    f.readline();
-                    break
-                i+=1;
+            [f.readline() for i in range(3)]
             line1 = f.readline() #counting the number of atoms and bonds before entering the for loops
             n_atoms = int(line1[:3])
             n_bonds = int(line1[3:6])
