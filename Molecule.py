@@ -127,10 +127,6 @@ class Molecule(Atom):
         self.cylinderRadii = [];
         self.bondOrder = orders; #The order of the bonds!
         self.mules = []; #Used for the animations
-        self.current_frame = 0;
-        self.pause = 20; #These three are timers for the animations and can easily be integrated into the json file.
-        self.transition = 59;#It would be concise to make this a class property. But I am not sure yet.
-        self.short_pause = 1;
         self.collection = self.make_collection(collection); #Make collection belongs to Bobject class
         self.bond_collection = self.make_collection(self.collection, "bonds_"+name) #If we don't add "name", collections with the same name will be created. Since blender does not allow for this, we end up re-referencing exisint collecitons. Not GUT for multiple molecules
         self.atom_collection = self.make_collection(self.collection, "atoms_"+name)
@@ -147,6 +143,8 @@ class Molecule(Atom):
         """
             Translates the molecule by v"""
         if hasattr(self, "mule"):
+            if type(v) == float or type(v) == int:
+                v = [v]*3
             self.translate_obj(self.mule, v)
         else:
             self.position += v;
@@ -583,21 +581,8 @@ class Molecule(Atom):
             self.unlink_obj(obj)
             self.link_obj(obj, self.bond_collection)
             self.set_origin(obj)
+            
 
-    def keyframe_state(self, objs, property = "all"):
-        if property == "all":
-            property = "LocRotScale";
-        if property == "Scale":
-            property = "Scaling";
-        try:
-            objs[0]
-        except:
-            objs = (objs,)
-        self.deselect_all();
-        self.select(*objs);
-        for obj in objs:
-            self.set_active(obj);
-            bpy.ops.anim.keyframe_insert_menu(type = property);
 
     def dieting(self, stick_factor, apply = True):
         for b in self.bondMeshes:
