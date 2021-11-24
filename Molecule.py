@@ -16,7 +16,20 @@ import os;
 import json;
 import re;
 
+    
+def load_atoms_data(): 
+    with open("atoms.json", "r") as j_file:
+        return json.load(j_file);
+
+    
+
 class Atom(Bobject):
+    #Defining some data relevant for this class
+    data = load_atoms_data();
+    radii_list = data["radii"];
+    colors = data["atoms"];
+    material_dict = {}
+    
     # The color and radii will be stored by the class for compatibility with old projects!
     def __init__(self, position = None, radius = None, material = None, name = None):
         """
@@ -25,9 +38,9 @@ class Atom(Bobject):
             material: blender object with the material of the atom
             """
         super().__init__();
-        self.name = self.set_name(name);
-        self.position = self.set_position(position);
-        self.radius = self.set_radius(radius);
+        self.name = self._set_name(name);
+        self.position = self._set_position(position);
+        self.radius = self._set_radius(radius);
         self.material = self.set_material(material);
 
     def set(self, argument, attribute): #I did this in case at some point we wish to add underscores or some other prefix to property names
@@ -35,18 +48,18 @@ class Atom(Bobject):
         setattr(self, attribute, argument);
 
 
-    def set_name(self, name):
+    def _set_name(self, name):
         self.set(name, "name");
         return self.name;
 
-    def set_position(self, position):
-        if type(position) == type(None):#The reason this is allowed is because Molecule can make use of the math here described
+    def _set_position(self, position):
+        if type(position) == type(None):
             return None;
         self.set(position, "position");
         self.position = np.array(list(position));
         return self.position;
 
-    def set_radius(self, radius):
+    def _set_radius(self, radius):
         self.set(radius, "radius");
         if not self.radius:
             if self.name:
@@ -105,6 +118,25 @@ class Atom(Bobject):
         else:
             m = bpy.data.materials.get(A);
         return m;
+
+    def draw(self, smooth = False, modifier = False):
+        bpy.ops.mesh.primitive_ico_sphere_add(radius=self.radius, location=self.position);
+        obj = bpy.context.active_object;
+        if not self.find_material(self.name):
+            self.make_material(self.name)
+        obj.active_material = self.find_material(self.name);
+        obj.name = self.name
+        self.set_obj(obj)
+
+        if smooth or modifier:
+            self.smooth(modifier = modifier)
+
+class Bond(Atom):
+    def __init__(self,obj):
+        super().__init__()
+        self.set_obj(obj)
+    
+    
         
 class Molecule(Atom):
     """
@@ -114,6 +146,7 @@ class Molecule(Atom):
     def __init__(self, atoms, radius_factor = 1,connections = None, name = None,
                  prettify_radii = True, collection = None, orders = []):
         super().__init__();
+        self.atoms = atoms;
         self.prettify_radii = prettify_radii; #If turned off, the actuall atomic radii will be used
         self.position = self.get_positions(atoms); #Note how we use the same property name for Atoms and Molecule. This is because then we can rely on the "setters" already defined in Atoms.
         self.radius = self.get_radii(atoms)*radius_factor;
@@ -122,10 +155,11 @@ class Molecule(Atom):
         self.name = self.set_molecule_name(name); #Name of the molecule
         self.connections = connections; # Bond indices
         self.meshes = []; #All of this molecules meshes
-        self.atomMeshes = [];
-        self.bondMeshes = [];
-        self.cylinderRadii = [];
-        self.bondOrder = orders; #The order of the bonds!
+        self.atom_meshes = [];
+        self.bond_meshes = [];
+        self.bonds = [];
+        self.bond_radii = [];
+        self.bond_orders = orders; #The order of the bonds!
         self.mules = []; #Used for the animations
         self.collection = self.make_collection(collection); #Make collection belongs to Bobject class
         self.bond_collection = self.make_collection(self.collection, "bonds_"+name) #If we don't add "name", collections with the same name will be created. Since blender does not allow for this, we end up re-referencing exisint collecitons. Not GUT for multiple molecules
@@ -173,7 +207,161 @@ class Molecule(Atom):
                 )
             self.position = np.einsum('bc,ac->ab', rotMat, self.position)
         return self
+        
+    def scale_atoms(self, v, atoms = None):
+        if atoms is None:
+            atoms = np.ones(len(self.names))
+        for i, a in enumerate(self.atoms):
+            if not atoms[i]:
+                continue
+            a.scale(v)
+        return self
+    
+    def translate_bond_orders(self, v, bonds = None):
+        if bonds is None:
+            bonds = np.ones(len(self.names))
+        for i, b in enumerate(self.bonds):
+            if not bonds[i]:
+                continue
+            b.translate(v)
+        return self
+    
+    def rotate_bonds(self, angles, axes = [0, 0, 1], bonds = None):
+        if bonds is None:
+            bonds = np.ones(len(self.names))
+        if type(angles) in (int, float):
+            angles = np.ones(len(self.atoms))*angles
+        axes = np.array(axes)
+        if axes.ndim == 1:
+            axes = np.tile(axes, (len(self.atoms), 1))
+        for (i, b), angle, axis in zip(enumerate(self.bonds), angles, axes):
+            if not bonds[i]:
+                continue
+            b.rotate(angle, axis)
+        return self
 
+
+    def scale_bonds(self, v, bonds = None):
+        if bonds is None:
+            bonds = np.ones(len(self.names))
+        for i, b in enumerate(self.bonds):
+            if not bonds[i]:
+                continue
+            b.scale(v)
+        return self
+    
+    def translate_atoms(self, v, atoms = None):
+        if atoms is None:
+            atoms = np.ones(len(self.names))
+        for i, a in enumerate(self.atoms):
+            if not atoms[i]:
+                continue
+            a.translate(v)
+        return self
+    
+    def rotate_atoms(self, angle, axis = [0, 0, 1], atoms = None):
+        if atoms is None:
+            atoms = np.ones(len(self.names))
+        for i, a in enumerate(self.atoms):
+            if not atoms[i]:
+                continue
+            a.rotate(angle, axis)
+        return self
+
+    def set_scale_atoms(self, v, atoms = None):
+        if atoms is None:
+            atoms = np.ones(len(self.names))
+        for i, a in enumerate(self.atoms):
+            if not atoms[i]:
+                continue
+            a.set_scale(v)
+        return self
+    
+    def set_position_atoms(self, v, atoms = None):
+        if atoms is None:
+            atoms = np.ones(len(self.names))
+        if type(v) in (int, float):
+            v = [v]*3
+        v = np.array(v)
+        if v.ndim == 1: # If we only supply one coordinate
+            v = np.tile(v, (len(self.atoms), 1))
+        for (i, a), p in zip(enumerate(self.atoms), v):
+            if not atoms[i]:
+                continue
+            a.set_position(p)
+        return self
+    
+    def set_rotation_atoms(self, angles, axes = [0, 0, 1], atoms = None):
+        if atoms is None:
+            atoms = np.ones(len(self.names))
+        if type(angles) in (int, float):
+            angles = np.ones(len(self.atoms))*angles
+        axes = np.array(axes)
+        if axes.ndim == 1:
+            axes = np.tile(axes, (len(self.atoms), 1))
+        for (i, a), angle, axis in zip(enumerate(self.atoms), angles, axes):
+            if not atoms[i]:
+                continue
+            if type(angle) in (np.float64, np.float32, np.float16, np.int64, np.int32, np.int16):
+                angle = float(angle)
+            a.set_rotation(angle, axis)
+        return self
+    
+    def set_scale_bonds(self, v, bonds = None):
+        if bonds is None:
+            bonds = np.ones(len(self.names))
+        for i, b in enumerate(self.bonds):
+            if not bonds[i]:
+                continue
+            b.set_scale(v)
+        return self
+    
+    def set_position_bonds(self, v, bonds = None):
+        if bonds is None:
+            bonds = np.ones(len(self.names))
+        if type(v) in (int, float):
+            v = [v]*3
+        v = np.array(v)
+        if v.ndim == 1: # If we only supply one coordinate
+            v = np.tile(v, (len(self.bonds), 1))
+        for (i, b), p in zip(enumerate(self.bonds), v):
+            if not bonds[i]:
+                continue
+            b.set_position(p)
+        return self
+    
+    def set_rotation_bonds(self, angles, axes = [0, 0, 1], bonds = None):
+        if bonds is None:
+            bonds = np.ones(len(self.names))
+        if type(angles) in (int, float):
+            angles = np.ones(len(self.bonds))*angles
+        axes = np.array(axes)
+        if axes.ndim == 1:
+            axes = np.tile(axes, (len(self.bonds), 1))
+        for (i, b), angle, axis in zip(enumerate(self.bonds), angles, axes):
+            if not bonds[i]:
+                continue
+            if type(angle) in (np.float64, np.float32, np.float16, np.int64, np.int32, np.int16):
+                angle = float(angle)
+            b.set_rotation(angle, axis)
+        return self
+
+    def to_quaternion_atoms(self):
+        for a in self.atoms:
+            a.to_euler()
+
+    def to_euler_atoms(self):
+        for a in self.atoms:
+            a.to_quaternion()
+
+    def to_quaternion_bonds(self):
+        for b in self.bonds:
+            b.to_quaternion()
+            
+    def to_euler_bonds(self):
+        for b in self.bonds:
+            b.to_euler()
+    
 
     def cartoonify(self, edgewidth = 0.03):
         """
@@ -183,7 +371,7 @@ class Molecule(Atom):
         for m in self.material:
             m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = 0.02; #Set the specular to a low value, as that looks weird in EEVEE
             
-        for mesh_list in [self.atomMeshes, self.bondMeshes]:
+        for mesh_list in [self.atom_meshes, self.bond_meshes]:
             self.deselect_all();# Deselect everything
             self.select(*mesh_list); # Select the set of objects in question
             self.set_active(mesh_list[0]);
@@ -220,12 +408,12 @@ class Molecule(Atom):
             atom_pair_indices: list (0,2) int indices of atoms which form the bond
             neighbour_indices: list (0,N) int indices of 1st gen neighbouts to atom_pair_indices
             """
-        c = self.bondMeshes[bond_index];
+        c = self.bond_meshes[bond_index];
         scale = .55 if len(neighbour_indices) == 2 else 0.4;
         self.scale_obj(c, [scale, scale, 1]);
         self.apply_transform(c, scale = True)
         cmat = np.array(c.matrix_world); #The unit vectors present here need to be used later.
-        rad = self.cylinderRadii[bond_index];
+        rad = self.bond_radii[bond_index];
         d = rad/2.1
         if len(neighbour_indices) < 2:
             r = np.array(cmat[:3, 0]);
@@ -381,7 +569,7 @@ class Molecule(Atom):
         orb = self.make_orbital(scalarfield, grid, isovalue, **kwargs);
         orb.location = position
         if type(atom_index) == int:
-            self.set_parent(self.atomMeshes[atom_index], orb)
+            self.set_parent(self.atom_meshes[atom_index], orb)
             self.orbital_meshes[atom_index] = orb
             self.meshes.append(orb)
             self.orbital_names[atom_index] = "Not None"
@@ -506,19 +694,16 @@ class Molecule(Atom):
         atoms = [Atom(position = coord, name = name) for coord, name in zip(c, a)];
         return cls(atoms, connections = b, orders = o, *args, **kwargs);
 
-    def make_atom_meshes(self, stick, smooth = True, prettify_radii = True):
-        self.atomMeshes = [];
+    def make_atom_meshes(self, smooth = True, prettify_radii = True):
+        self.atom_meshes = [];
         rad = self.radius.copy();
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius)
-        for p, r, m, n in zip(self.position, rad, self.material, self.names):
-            bpy.ops.mesh.primitive_ico_sphere_add(radius=r, location=p);
-            obj = bpy.context.active_object;
-            obj.active_material = m;
-            obj.name = n;
-            if smooth:
-                self.smooth_obj(obj, modifier = True);
-            self.atomMeshes.append(obj);
+        for a, r in zip(self.atoms, rad):
+            a._set_radius(r)
+            a.draw(smooth = smooth, modifier = True)
+            obj = a.get_obj()
+            self.atom_meshes.append(obj);
             self.meshes.append(obj);
             self.unlink_obj(obj);
             self.link_obj(obj, self.atom_collection);
@@ -532,12 +717,10 @@ class Molecule(Atom):
 
 
 
-    def make_cylinder_meshes(self, stick, prettify_radii = True, cartoonish = False):
+    def make_cylinder_meshes(self, prettify_radii = True, cartoonish = False):
         if type(self.connections) == type(None):
             return;
 
-        #self.bondMeshes = [];
-        #self.cylinderRadii = [];
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius);
         else:
@@ -549,8 +732,6 @@ class Molecule(Atom):
             r0, r1 = rad[i0], rad[i1];
             n0, n1 = self.names[i0], self.names[i1];
             r = self.getBondRadius(rad[np.array([i0, i1])]);
-            #if stick:
-                #r =  r**.5/10 + .02
             p1p0 = (p1-p0)/np.linalg.norm(p1-p0);
             middle = (p1+p1p0*(r0-r1) + p0)/2;
             if self.names[i1] != self.names[i0]: #If they are different atoms we make half the bond of each color. Else we make a single long cyllinder
@@ -573,22 +754,23 @@ class Molecule(Atom):
                 self.smooth_obj(c0, modifier = False);
                 c0.data.use_auto_smooth = True;
                 c0.active_material = m0;
-            self.cylinderRadii.append(r);
+            self.bond_radii.append(r);
             obj = bpy.context.active_object;
             obj.name = n0 + n1;
-            self.bondMeshes.append(obj);
+            self.bond_meshes.append(obj);
             self.meshes.append(obj);
             self.unlink_obj(obj)
             self.link_obj(obj, self.bond_collection)
             self.set_origin(obj)
+            self.bonds.append(Bond(obj))
             
 
 
     def dieting(self, stick_factor, apply = True):
-        for b in self.bondMeshes:
+        for b in self.bond_meshes:
             self.scale_obj(b, [*[stick_factor]*2, 1]);
             self.apply_transform(b, scale = apply)
-        for a in self.atomMeshes:
+        for a in self.atom_meshes:
             self.scale_obj(a, [stick_factor]*3);
             self.apply_transform(a, scale = apply)
 
@@ -606,11 +788,11 @@ class Molecule(Atom):
         """
         self.mule = self.make_empty()
         
-        self.make_atom_meshes(stick, prettify_radii = prettify_radii);
-        self.make_cylinder_meshes(stick, prettify_radii = prettify_radii, cartoonish = cartoonish);
+        self.make_atom_meshes(prettify_radii = prettify_radii);
+        self.make_cylinder_meshes(prettify_radii = prettify_radii, cartoonish = cartoonish);
 
         if show_double_bonds:
-            for i, o in enumerate(self.bondOrder):
+            for i, o in enumerate(self.bond_orders):
                 if o == 1:
                     continue
                 elif o < 4: #We can not have 4 bonds!!!
@@ -761,10 +943,6 @@ class Molecule(Atom):
             if apply_subsurf:
                 bpy.ops.object.modifier_add(type="SUBSURF");
                 bpy.ops.object.modifier_apply();
-            #bpy.ops.object.modifier_add(type="SOLIDIFY"); #This modifier has its moments, but it screws up animations with planar molecules
-            #self.mirror.modifiers["Solidify"].offset = 0;
-            #self.mirror.modifiers["Solidify"].thickness = 0.01;
-            #bpy.ops.object.modifier_apply();
         if not bpy.data.materials.get("mirror"):
             m = bpy.data.materials.new(name="mirror");
         m = bpy.data.materials.get("mirror");

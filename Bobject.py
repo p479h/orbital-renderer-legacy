@@ -13,23 +13,31 @@ import json;
 import re;
 
 
-    
-def load_atoms_data(): 
-    with open("atoms.json", "r") as j_file:
-        return json.load(j_file);
-
-
 class Bobject: #Blender object 
-    data = load_atoms_data();
-    radii_list = data["radii"];
-    colors = data["atoms"];
-    def __init__(self):
-        self.pause = 20; #These three are timers for the animations and can easily be integrated into the json file.
-        self.transition = 59;#It would be concise to make this a class property. But I am not sure yet.
-        self.short_pause = 1;
+    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1):
+        self.obj = obj #Blender object that obj refers to
+        self.parent = obj.parent if not obj is None else None
+        self.pause = pause; #These three are timers for the animations and can easily be integrated into the json file.
+        self.transition = transition;#It would be concise to make this a class property. But I am not sure yet.
+        self.short_pause = short_pause;
         self.frame_current = 0;
         self.updater = None
         self.keyframes = []
+
+    def set_obj(self, obj):
+        """ Sets the object that Bobject wraps"""
+        self.obj = obj
+        self.parent = obj.parent #May be None
+
+    def get_obj(self):
+        return self.obj
+
+    def get_angles(self, obj = None):
+        if obj is None:
+            obj = self.obj
+        rot = "rotation_"+("quaternion" if obj.rotation_mode == "QUATERNION" else "euler")
+        return [*getattr(obj, rot)]
+
 
     #This is a helper class that offers basic blender functionality
     @staticmethod
@@ -51,8 +59,25 @@ class Bobject: #Blender object
             return [rgb_r, rgb_g, rgb_b]
         elif _tuple == True:
             return (rgb_r, rgb_g, rgb_b, 1.0)
+        
+    def to_euler(self, obj = None):
+        self.set_active(obj if obj else self.obj)
+        if not self.obj is None:
+            self.obj.rotation_mode = "XYZ"
+        elif not obj is None:
+            obj.rotation_mode = "XYZ"
+        else:
+            print("NO VALID OBJECT TO_EULER")
+            
+    def to_quaternion(self, obj = None):
+        if not self.obj is None:
+            self.obj.rotation_mode = "QUATERNION"
+        elif not obj is None:
+            obj.rotation_mode = "QUATERNION"
+        else:
+            print("NO VALID OBJECT TO_EULER")            
 
-    def add_updater(self, function):
+    def set_updater(self, function):
         self.updater = function
     
     def play(self, *objs):
@@ -70,30 +95,55 @@ class Bobject: #Blender object
         self.frame_current += self.short_pause
         self.set_frame(self.get_current_frame() + self.short_pause)
 
-    def get_keyframe_dict(self,
-                          property = None,
-                          frame = None,
-                          value = None):
-        return dict(property = property,
-                    frame = frame,
-                    value = value)
-
-    def add_keyframe(self, property, v, frame):
-        self.transitions.append(
-            self.get_keyframe_dict(
-                property = property,
-                value = v,
-                frame = frame))
-            
-
-    def _traslate_obj(self, v, frame): 
-        self.add_keyframe("location", v, frame)
+    def set_scale_obj(self, obj, v):
+        if type(v) in (int, float):
+            v = [v]*3
+        obj.scale = mathutils.Vector(v)
+        return obj
         
-    def _scale_obj(self, v, frame):
-        self.add_keyframe("scale", v, frame)
+    def set_location_obj(self, obj, v):
+        if type(v) in (int, float):
+            v = [v]*3
+        obj.location = mathutils.Vector(v)
+        return obj
 
-    def _rotate_obj(self, v, frame):
-        self.add_keyframe("rotation", v, frame)
+    def set_position_obj(self, *args, **kwargs):
+        return self.set_location_obj(*args, **kwargs)
+
+    def set_rotation_obj(self, obj, angle, axis):
+        rmode = obj.rotation_mode
+        if rmode == "QUATERNION":
+            obj.rotation_quaternion = mathutils.Quaternion(axis, angle)
+        else:
+            if type(angle) in (int, float):
+                angle = [angle]*3
+            obj.rotation_euler = mathutils.Euler(angle, rmode)
+        return obj
+
+    def set_position(self, v):
+        return self.set_position_obj(self.obj, v)
+
+    def set_location(self, v):
+        return self.set_position(self,v)
+
+    def set_scale(self, v):
+        return self.set_scale_obj(self.obj, v)
+
+    def set_rotation(self, angle, axis=[0, 0, 1]):
+        return self.set_rotation_obj(self.obj, angle, axis)
+
+    def scale(self, v):
+        self.scale_obj(self.obj, v)
+        return self
+
+    def rotate(self, angle, axis):
+        self.rotate_obj(self.obj, angle, axis)
+        return self
+
+    def translate(self, v):
+        self.translate_obj(self.obj, v)
+        return self
+            
         
     def translate_obj(self, obj, v):
         """
@@ -125,16 +175,24 @@ class Bobject: #Blender object
             obj.rotation_euler.rotate(mathutils.Euler(angle, rmode))
         return obj
 
+
+    def add_modifier_obj(self, obj, modifier = "SUBSURF"):
+        obj.modifiers.new(modifier.lower(), modifier);
+        obj.modifiers[modifier.lower()].levels = 2;
+        return obj.modifiers[modifier.lower()]
+
+    def add_modifier(self, modifier = "SUBSURF"):
+        return self.add_modifier_obj(self.obj, modifier)
     
-    @staticmethod
-    def smooth_obj(obj, modifier = False):
-        bpy.ops.object.select_all(action='DESELECT');
-        obj.select_set(True);
-        bpy.context.view_layer.objects.active = obj;
+    def smooth_obj(self, obj, modifier = False):
+        self.deselect_all()
+        self.set_active(obj)
         bpy.ops.object.shade_smooth();
         if modifier:
-            obj.modifiers.new("Smoother", "SUBSURF");
-            obj.modifiers["Smoother"].levels = 2;
+            self.add_modifier("SUBSURF")
+
+    def smooth(self, *args, **kwargs):
+        self.smooth_obj(self.obj, *args, **kwargs)
 
     @staticmethod
     def deselect_all():
@@ -144,6 +202,17 @@ class Bobject: #Blender object
     def set_active(self, obj):
         self.select(obj);
         bpy.context.view_layer.objects.active = obj;
+
+    @staticmethod
+    def get_active():
+        return bpy.context.view_layer.objects.active
+
+    @staticmethod
+    def find_material(m):
+        return bpy.data.materials.get(m)
+
+    def get_material(self):
+        return self.material
 
     @staticmethod
     def select(*objs):
@@ -177,6 +246,8 @@ class Bobject: #Blender object
 
     def keyframe_state(self, *objs, property = "all", frame = None):
         property = property.lower()
+        if objs[0].__class__ != bpy.types.Object: #In case we are dealing with wrapped objects
+            objs = [o.obj for o in objs] 
         modes = ["rotation_euler" if "X" in o.rotation_mode else "rotation_quaternion" for o in objs]
         if property == "all":
             properties = [("location", "scale", modes[i]) for i, o in enumerate(objs)]
