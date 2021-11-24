@@ -13,6 +13,7 @@ import json;
 import re;
 
 
+    
 def load_atoms_data(): 
     with open("atoms.json", "r") as j_file:
         return json.load(j_file);
@@ -27,8 +28,32 @@ class Bobject: #Blender object
         self.transition = 59;#It would be concise to make this a class property. But I am not sure yet.
         self.short_pause = 1;
         self.frame_current = 0;
+        self.updater = None
+        self.keyframes = []
 
     #This is a helper class that offers basic blender functionality
+    @staticmethod
+    def hex2rgb(_hex,_tuple=False): #Ivos function.
+        """
+        @brief      Converts RGB code to numeric values
+
+        @param      angle  the hex code
+        @param      angle  whether to create a tuple
+
+        @return     Numeric color values
+        """
+        string = _hex.lstrip('#') # if hex color starts with #, remove # char
+        rgb255 = list(int(string[i:i+2], 16) for i in (0, 2 ,4))
+        rgb_r = rgb255[0]/255.0;
+        rgb_g = rgb255[1]/255.0;
+        rgb_b = rgb255[2]/255.0;
+        if _tuple == False:
+            return [rgb_r, rgb_g, rgb_b]
+        elif _tuple == True:
+            return (rgb_r, rgb_g, rgb_b, 1.0)
+
+    def add_updater(self, function):
+        self.updater = function
     
     def play(self, *objs):
         self.keyframe_state(*objs)
@@ -44,6 +69,61 @@ class Bobject: #Blender object
         self.keyframe_state(*objs)
         self.frame_current += self.short_pause
         self.set_frame(self.get_current_frame() + self.short_pause)
+
+    def get_keyframe_dict(self,
+                          property = None,
+                          frame = None,
+                          value = None):
+        return dict(property = property,
+                    frame = frame,
+                    value = value)
+
+    def add_keyframe(self, property, v, frame):
+        self.transitions.append(
+            self.get_keyframe_dict(
+                property = property,
+                value = v,
+                frame = frame))
+            
+
+    def _traslate_obj(self, v, frame): 
+        self.add_keyframe("location", v, frame)
+        
+    def _scale_obj(self, v, frame):
+        self.add_keyframe("scale", v, frame)
+
+    def _rotate_obj(self, v, frame):
+        self.add_keyframe("rotation", v, frame)
+        
+    def translate_obj(self, obj, v):
+        """
+            Translates the molecule by v"""
+        obj.location = obj.location + mathutils.Vector(v)
+        return obj
+
+    
+    def scale_obj(self, obj, v):
+        """
+            scales the molecule by v"""
+        if type(v) == int or type(v) == float:
+            v = [v]*3
+        obj.scale = obj.scale * mathutils.Vector(v)
+        return obj
+        
+    
+    def rotate_obj(self, obj, angle, axis = [0, 0, 1]):
+        """
+            rotates the molecule by angle about axis
+            if using quaternion, angle should be a float or int.
+            if using Euler, angle should be a tuple or list."""
+        rmode = obj.rotation_mode
+        if rmode == "QUATERNION":
+            obj.rotation_quaternion.rotate(mathutils.Quaternion(axis, angle))
+        else:
+            if type(angle) in (int, float):
+                angle = [angle]*3
+            obj.rotation_euler.rotate(mathutils.Euler(angle, rmode))
+        return obj
 
     
     @staticmethod
@@ -249,37 +329,6 @@ class Bobject: #Blender object
         
 
     @classmethod
-    def translate_obj(cls, obj, v):
-        """
-            Translates the molecule by v"""
-        obj.location = obj.location + mathutils.Vector(v)
-        return obj
-
-    @classmethod
-    def scale_obj(cls, obj, v):
-        """
-            scales the molecule by v"""
-        if type(v) == int or type(v) == float:
-            v = [v]*3
-        obj.scale = obj.scale * mathutils.Vector(v)
-        return obj
-        
-    @classmethod
-    def rotate_obj(cls, obj, angle, axis = [0, 0, 1]):
-        """
-            rotates the molecule by angle about axis
-            if using quaternion, angle should be a float or int.
-            if using Euler, angle should be a tuple or list."""
-        rmode = obj.rotation_mode
-        if rmode == "QUATERNION":
-            obj.rotation_quaternion.rotate(mathutils.Quaternion(axis, angle))
-        else:
-            if type(angle) in (int, float):
-                angle = [angle]*3
-            obj.rotation_euler.rotate(mathutils.Euler(angle, rmode))
-        return obj
-
-    @classmethod
     def apply_transform(cls, ob, location=False, rotation=False, scale=False):
         Matrix = mathutils.Matrix
         mb = ob.matrix_basis
@@ -305,8 +354,7 @@ class Bobject: #Blender object
             c.matrix_local = M @ c.matrix_local
             
         ob.matrix_basis = basis[0] @ basis[1] @ basis[2]
-            
-    
+        
     def hide(self, obj, hide_render = False):
         obj.hide_set(True);
         obj.hide_render = hide_render;
@@ -314,3 +362,30 @@ class Bobject: #Blender object
     def unhide(self, obj, unhide_render = True):
         obj.hide_set(False);
         obj.hide_render = unhide_render;
+
+    def render_animation(self, times, directs):
+        """
+        Used_for_symmetry operations
+        Times are the ending times of each animation (and beggining of the first)
+        directs is the list of directories for each time range!
+        """
+        zfill = len(str(bpy.data.scenes["Scene"].frame_end)); #Ensures correct ordering!!!
+        bpy.data.scenes["Scene"].render.image_settings.file_format = "PNG";
+        ranges = [list(range(times[i], times[i+1])) for i in range(len(times[:-1]))];
+        for ir, r in enumerate(ranges):
+           for frame in r:
+               if not self.updater is None:
+                   self.updater()
+               self.setup_dir(directs[ir])
+               self.render_image(directs[ir], frame = frame)
+
+
+    def render_image(self, directory = None, name = None, file_format = 'PNG', frame = 0):
+        if not name:
+            name = str(frame).zfill(4);
+        if not directory:
+            directory = "."
+        bpy.data.scenes["Scene"].render.image_settings.file_format = file_format;
+        bpy.context.scene.render.filepath = os.path.join(os.getcwd(), directory, name);
+        self.set_frame(frame);
+        bpy.ops.render.render(use_viewport = True, write_still=True);

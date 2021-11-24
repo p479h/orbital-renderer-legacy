@@ -116,21 +116,3 @@ class Arrow:
         textobj.hide_render = True;
 
 
-def hex2rgb(_hex,_tuple=False): #Ivos function.
-    """
-    @brief      Converts RGB code to numeric values
-
-    @param      angle  the hex code
-    @param      angle  whether to create a tuple
-
-    @return     Numeric color values
-    """
-    string = _hex.lstrip('#') # if hex color starts with #, remove # char
-    rgb255 = list(int(string[i:i+2], 16) for i in (0, 2 ,4))
-    rgb_r = rgb255[0]/255.0;
-    rgb_g = rgb255[1]/255.0;
-    rgb_b = rgb255[2]/255.0;
-    if _tuple == False:
-        return [rgb_r, rgb_g, rgb_b]
-    elif _tuple == True:
-        return (rgb_r, rgb_g, rgb_b, 1.0)
