@@ -67,6 +67,7 @@ class Isosurface(Bobject):
         iso_guesses2 = np.linspace(*lims, resolution).reshape(-1, 1);
         counts = np.array([errorFunc(i) for i in iso_guesses2])
         return iso_guesses2[np.argmin(np.abs(counts - Npoints))]
+    
     @staticmethod
     def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
         """
@@ -151,7 +152,7 @@ class Isosurface(Bobject):
         self.set_origin(new_object);
         return new_object;
     
-    def generate_isosurface(self, material_copy = True, center_origin = True):
+    def generate_isosurface(self, material_copy = True, center_origin = True, transition_field = False):
         """
         Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
         scalarfield: values of wavefunction in the corresponding places in the grid
@@ -164,9 +165,8 @@ class Isosurface(Bobject):
         r = self.r;
         n = self.n;
         grid = self.grid
-        isovalue = self.isovalue
-        scalarfield = self.scalarfield
-        print(scalarfield.shape)
+        isovalue = self.isovalue if transition_field is False else self.current_isovalue
+        scalarfield = self.scalarfield if transition_field is False else self.current_scalarfield
         spacing = np.full(3, r*2/(n-1));
         for sign, val in zip(["p", "n"],[1, -1]):
             isovalue*=val;
@@ -186,6 +186,7 @@ class Isosurface(Bobject):
         bpy.ops.object.join();
         self.set_origin(orb);
         self.set_obj(orb)
+        self.mesh = orb
         return orb        
 
 class AtomicOrbital(Isosurface):
@@ -201,6 +202,45 @@ class AtomicOrbital(Isosurface):
         if isovalue is None:
             self.isovalue = self.iso_find2(self.r, self.position, self.field_func, 1)
         self.scalarfield = None
+        self.current_scalarfield = self.scalarfield
+        self.current_isovalue = self.isovalue
+        self.transitions = []
+
+    def add_transition(self, isovalue = None, duration = 59, wavefunction = wavefunctions.dz2):
+        if isovalue is None:
+            isovalue = self.iso_find2(self.r, self.position, wavefunction, 1)
+        transition = {
+            "frames": [self.get_current_frame(), self.get_current_frame() + duration],
+            "isovalues": [self.isovalue, isovalue],
+            "scalarfields": np.array([self.scalarfield, self.apply_field(wavefunction)]),
+            "interpolation": self.bezier}
+        self.transitions.append(transition)
+
+    def update_mesh(self, frame, transition):
+        limits = transition["frames"]
+        duration = np.diff(limits)[0]
+        if frame not in range(*limits):
+            if frame == limits[-1]:
+                self.isovalue = transition["isovalue"]
+                self.field_func = transition["fieldfunc"]
+            return
+        interp = transition["interpolation"]
+        fields = transition["scalarfields"]
+        factor_start = interp(1, 0, duration)[frame-limits[0]]
+        factor_end = 1-factor_start
+        factors = np.array([factor_start, factor_end]).reshape(2, *[1 for i in range(fields.ndim-1)])
+        self.current_isovalue = interp(*transition["isovalues"], duration)[frame-limits[0]]
+        self.current_scalarfield = (factors*fields).sum(0)
+        self.delete_obj(self.obj, delete_collection = False)
+        self.generate_isosurface(transition_field = True)
+        
+
+    def apply_field(self, wavefunction):
+        d = self.grid - self.position
+        dist = np.linalg.norm(d, axis = -1)
+        phi = np.arctan2(d[..., 1], d[..., 0]);
+        theta = np.arctan2(np.linalg.norm(d[..., :2], axis = -1), d[..., 2])
+        return wavefunction(dist, theta, phi)
         
 
     @property
@@ -218,14 +258,7 @@ class AtomicOrbital(Isosurface):
     @scalarfield.setter
     def scalarfield(self, value):
         if value is None:
-            self._scalarfield = self.apply_field(
-                self.grid,
-                self.position,
-                self.field_func,
-                molecule_mat = np.eye(3),
-                inv = [],
-                SALC = [],
-                orbital_orientation_function = self.orientation_function).sum(0)
+            self._scalarfield = self.apply_field(self.field_func)
         else:
             self._scalarfield = value
 
