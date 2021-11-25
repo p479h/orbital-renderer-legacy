@@ -14,15 +14,24 @@ import re;
 
 
 class Bobject: #Blender object 
-    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1):
+    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob"):
         self.obj = obj #Blender object that obj refers to
-        self.parent = obj.parent if not obj is None else None
+        self.parent = None
         self.pause = pause; #These three are timers for the animations and can easily be integrated into the json file.
         self.transition = transition;#It would be concise to make this a class property. But I am not sure yet.
         self.short_pause = short_pause;
+        self.name = name
         self.frame_current = 0;
         self.updater = None
         self.keyframes = []
+
+    @property
+    def parent(self):
+        return self.obj.parent
+
+    @parent.setter
+    def parent(self, parent):
+        self._parent = parent
 
     def set_obj(self, obj):
         """ Sets the object that Bobject wraps"""
@@ -348,13 +357,17 @@ class Bobject: #Blender object
             if not bpy.data.collections.get(name):
                 c = bpy.data.collections.new(name  = name);
                 bpy.context.scene.collection.children.link(c)
-            return c;
+                return c;
+            return bpy.data.collections.get(name)
         else:
             if parent.children.get(name):#Else we make the collection under that parent
                 return parent.children.get(name);
             c = bpy.data.collections.new(name = name);
-            parent.children.link(c);
+            self.set_collection_parent(parent, c)
             return c
+
+    def set_collection_parent(self, parent, child):
+        parent.children.link(child)
 
     @staticmethod
     def copy_material(obj):
@@ -389,9 +402,7 @@ class Bobject: #Blender object
             self.deselect_all();
             self.unhide(obj);
             self.set_active(obj);
-            print(collections)
             bpy.ops.object.delete(use_global = True);
-            print(collections)
             if delete_collection:
                 for c in collections:
                     if len(c.objects) == 0:
