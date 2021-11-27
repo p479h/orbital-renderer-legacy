@@ -190,39 +190,84 @@ class Isosurface(Bobject):
         return orb        
 
 class AtomicOrbital(Isosurface):
-    def __init__(self, r = 10, n = 30, isovalue = None, position = [0, 0, 0], coeff = 1, *args, **kwargs):
+    def __init__(self, r = 10, n = 30, isovalue = None, position = [0, 0, 0], coeff = 1, field_func = wavefunctions.pz, *args, **kwargs):
         super().__init__(self, *args, **kwargs)
         self.r = r
         self.n = n
+        self.coeff = coeff #Coefficient that multiplies the wavefunction
         self.grid = self.generate_grid(self.r, self.n)
         self.position = np.array(position)
-        self.field_func = wavefunctions.pz #Wavefunction that takes r theta and phi as arguments
-        self.orientation_function = lambda a: np.eye(3)
-        self.coeff = coeff #Coefficient that multiplies the wavefunction
+        self.field_func = field_func #Wavefunction that takes r theta and phi as arguments
+        self.transform_function = lambda atom_pos: np.eye(3)
+        self.transform = None
         if isovalue is None:
             self.isovalue = self.iso_find2(self.r, self.position, self.field_func, 1)
         self.scalarfield = None
         self.current_scalarfield = self.scalarfield
         self.current_isovalue = self.isovalue
         self.transitions = []
+        self.add_updater(self.updater)
+
+    @property
+    def transform(self):
+        return self._transform
+
+    @transform.setter
+    def transform(self, value):
+        if type(value) == np.ndarray or type(value) == mathutils.Matrix:
+            self._transform = np.array(value)
+        elif value is None:
+            self._transform = np.eye(3)
+        else:
+            self.transform_function = value
+            self._transform = value(self.position)
+            
+        self.scalarfield = None #update scalarfield
 
     def add_transition(self, isovalue = None, duration = 59, wavefunction = wavefunctions.dz2):
         if isovalue is None:
             isovalue = self.iso_find2(self.r, self.position, wavefunction, 1)
+            final_frame = self.get_current_frame() + duration
+        if len(self.transitions) > 0:
+            last_transition = self.transitions[-1]
+            f1, i1, sf1, ff1 = last_transition["frames"][1], \
+                            last_transition["isovalues"][1], \
+                            last_transition["scalarfields"][1], \
+                            last_transition["wavefunctions"][1];
+        else:
+            f1, i1, sf1, ff1 = self.get_current_frame(), \
+                             self.isovalue, \
+                             self.scalarfield, \
+                             self.field_func
         transition = {
-            "frames": [self.get_current_frame(), self.get_current_frame() + duration],
-            "isovalues": [self.isovalue, isovalue],
-            "scalarfields": np.array([self.scalarfield, self.apply_field(wavefunction)]),
-            "interpolation": self.bezier}
+            "frames": [f1, final_frame],
+            "isovalues": [i1, isovalue],
+            "scalarfields": np.array([sf1, self.apply_field(wavefunction)]),
+            "interpolation": self.bezier,
+            "wavefunctions": [ff1, wavefunction]}
         self.transitions.append(transition)
+        self.set_frame(final_frame)
+
+    def updater(self, frame):
+        for active_transition in self.find_active_transitions(frame):
+            self.update_mesh(frame, active_transition)
+
+    def find_active_transitions(self, frame):
+        transition_ranges = np.array([t.get("frames") for t in self.transitions])
+        within_ranges = (frame<=transition_ranges[:, 1])&(frame>=transition_ranges[:, 0])
+        return [t for t, w in zip(self.transitions, within_ranges) if w]
+        
 
     def update_mesh(self, frame, transition):
         limits = transition["frames"]
         duration = np.diff(limits)[0]
-        if frame not in range(*limits):
-            if frame == limits[-1]:
-                self.isovalue = transition["isovalue"]
-                self.field_func = transition["fieldfunc"]
+        if frame not in range(*[limits[0], limits[1]-1]):
+            print("GOT HERE")
+            print(limits)
+            if frame == limits[-1]-1:
+                self.isovalue = transition["isovalues"][1]
+                self.field_func = transition["wavefunctions"][1]
+                self.scalarfield = transition["scalarfields"][1]
             return
         interp = transition["interpolation"]
         fields = transition["scalarfields"]
@@ -236,7 +281,8 @@ class AtomicOrbital(Isosurface):
         
 
     def apply_field(self, wavefunction):
-        d = self.grid - self.position
+        transform = np.linalg.inv(self.transform) #Transform space relative to orbital
+        d = np.einsum("de,abce->abcd",transform,self.grid) - self.position
         dist = np.linalg.norm(d, axis = -1)
         phi = np.arctan2(d[..., 1], d[..., 0]);
         theta = np.arctan2(np.linalg.norm(d[..., :2], axis = -1), d[..., 2])
@@ -261,4 +307,6 @@ class AtomicOrbital(Isosurface):
             self._scalarfield = self.apply_field(self.field_func)
         else:
             self._scalarfield = value
+
+    
 

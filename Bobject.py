@@ -22,8 +22,14 @@ class Bobject: #Blender object
         self.short_pause = short_pause;
         self.name = name
         self.frame_current = 0;
-        self.updater = None
-        self.keyframes = []
+        self.updaters = []
+        self.transitions = []
+
+    def add_updater(self, func):
+        """
+            takes frame as an argument
+            """
+        self.updaters.append(func)
 
     @property
     def parent(self):
@@ -85,9 +91,6 @@ class Bobject: #Blender object
             obj.rotation_mode = "QUATERNION"
         else:
             print("NO VALID OBJECT TO_EULER")            
-
-    def set_updater(self, function):
-        self.updater = function
     
     def play(self, *objs):
         self.keyframe_state(*objs)
@@ -445,7 +448,7 @@ class Bobject: #Blender object
         obj.hide_set(False);
         obj.hide_render = unhide_render;
 
-    def render_animation(self, times, directs):
+    def render_animation_group_theory(self, times, directs):
         """
         Used_for_symmetry operations
         Times are the ending times of each animation (and beggining of the first)
@@ -456,11 +459,23 @@ class Bobject: #Blender object
         ranges = [list(range(times[i], times[i+1])) for i in range(len(times[:-1]))];
         for ir, r in enumerate(ranges):
            for frame in r:
-               if not self.updater is None:
-                   self.updater()
+               if len(self.updaters) > 0:
+                   [u(frame) for u in self.updaters]
                self.setup_dir(directs[ir])
                self.render_image(directs[ir], frame = frame)
 
+    
+    def render_animation(self, frames = None, *args, **kwargs):
+        """
+        arguments are the same as render_image"""
+        if frames is None:
+            frames = [0, self.get_current_frame()]
+        for frame in range(*frames):
+            if len(self.updaters) > 0:
+                [u(frame) for u in self.updaters]
+            kwargs["frame"] = frame
+            self.render_image(*args, **kwargs)
+        
 
     def render_image(self, directory = None, name = None, file_format = 'PNG', frame = 0):
         if not name:
