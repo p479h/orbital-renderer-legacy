@@ -84,6 +84,73 @@ def dxy(r, theta, phi):
     return radial * angular;
 
 
+#Functions from https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
+def fy3x2y2(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)
+    return R*1/4*np.sqrt(35/(2*np.pi))*(3*xr**2 - yr**2)*yr
+
+def fxyz(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)
+    return R*1/2*np.sqrt(105/np.pi)*xr*yr*zr
+
+def fyz2(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)
+    return R*1/4*np.sqrt(21/(2*np.pi))*yr*(4*zr**2 - xr**2 - yr**2)
+
+def fz3(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)
+    return R*1/4*np.sqrt(7/np.pi)*zr*(2*zr**2 - 3*xr**2 - 3*yr**2)
+
+def fxz2(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)    
+    return R*1/4*np.sqrt(21/(np.pi*2))*xr*(4*zr**2 - xr**2 - yr**2)
+
+
+def fzx2y2(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)
+    return R*1/4*np.sqrt(105/np.pi)*(xr**2 - yr**2)*zr
+
+def fx3yx2(r, theta, phi):
+    xr = np.sin(theta)*np.cos(phi)
+    yr = np.sin(theta)*np.sin(phi)
+    zr = np.cos(theta)
+    a0 = 0.53
+    rho = 2*r/4/a0
+    R = (1/96*np.sqrt(35)) *rho**3*1/2*np.exp(-rho/2)
+    return R*1/4*np.sqrt(35/(np.pi*2))*(xr**2 - 3*yr**2)*xr
+
+
+functions = [s1, px, py, pz, dz2, dxz, dyz, dx2y2, dxy, px, dz2, fy3x2y2, fxyz, fyz2, fz3, fxz2, fzx2y2, fx3yx2]
 
 #@jit(nopython = True, cache = True, nogil=True)
 def binatodeci(binary):

@@ -202,6 +202,8 @@ class AtomicOrbital(Isosurface):
         self.transform = None
         if isovalue is None:
             self.isovalue = self.iso_find2(self.r, self.position, self.field_func, 1)
+        else:
+            self.isovalue = isovalue
         self.scalarfield = None
         self.current_scalarfield = self.scalarfield
         self.current_isovalue = self.isovalue
