@@ -3,7 +3,7 @@ import wavefunctions
 import bpy
 import mathutils
 from skimage.measure import marching_cubes
-from scipy.optimize import minimize, brute
+from scipy.interpolate import interp1d
 from Bobject import Bobject
 from numba import njit
 import time
@@ -208,6 +208,7 @@ class AtomicOrbital(Isosurface):
         self.current_scalarfield = self.scalarfield
         self.current_isovalue = self.isovalue
         self.transitions = []
+        self.transitions2 = False
         self.add_updater(self.updater)
 
     @property
@@ -249,13 +250,85 @@ class AtomicOrbital(Isosurface):
             "wavefunctions": [ff1, wavefunction]}
         self.transitions.append(transition)
         self.set_frame(final_frame)
+        
+    def add_transition2(self, isovalue = None, duration = 59, wavefunction = wavefunctions.dz2):
+        self.transitions2 = True
+        if isovalue is None:
+            isovalue = self.iso_find2(self.r, self.position, wavefunction, 1)
+            final_frame = self.get_current_frame() + duration
+        if len(self.transitions) > 0:
+            last_transition = self.transitions[-1]
+            f1, i1, sf1, ff1 = last_transition["frames"][-1], \
+                            last_transition["isovalues"][-1], \
+                            last_transition["scalarfields"][-1], \
+                            last_transition["wavefunctions"][-1];
+        else:
+            f1, i1, sf1, ff1 = self.get_current_frame(), \
+                             self.isovalue, \
+                             self.scalarfield, \
+                             self.field_func
+        frames = np.arange(f1, final_frame)
+        scalarfields = np.array([sf1, self.apply_field(wavefunction)])
+        isovalues = np.array([i1, isovalue])
+        frames_err = frames.copy()
+        if len(frames) < 400:
+            frames_err = np.linspace(*frames[[0, -1]], 400) 
+        errors, frames_err = self.find_errors_in_cloud(frames_err, *scalarfields, isovalues)
+        t_func = interp1d(errors, frames_err, kind = "linear")
+        ltimes = t_func( #linearized times
+            self.bezier(errors.min(), errors.max(), len(frames)))
+        ratios = (ltimes - ltimes.min())/(ltimes - ltimes.min()).max() #From 0 to 1
+        isovalues = ratios*isovalue + (1-ratios)*i1
+        
+        transition = {
+            "frames": frames,
+            "isovalues": isovalues,
+            "ratios": ratios,
+            "scalarfields": scalarfields,
+            "interpolation": self.bezier,
+            "wavefunctions": [ff1, wavefunction]}
+        self.transitions.append(transition)
+        self.set_frame(final_frame)
+
+    def find_isosign(self, scalarfield, isovalue = None):
+        if isovalue is None:
+            isovalue = self.isovalue
+        is_iterable = False
+        try:
+            isovalue[0]
+            is_iterable = True
+        except:
+            None
+        if is_iterable and scalarfield.ndim == 4:
+            isovalue = isovalue.reshape(-1, *np.ones(len(scalarfield)-1).astype(int))
+
+        return (scalarfield > isovalue)+(scalarfield < -isovalue)*-1
+
+    def find_errors_in_cloud(self, frames, scalarfield1, scalarfield2, isovalues):
+        frames = np.array(frames)
+        frames = frames - frames.min()
+        ratios = frames/frames.max() #Now we go from 0 to 1
+
+        #WE need 1 error per ratio
+        ratios = ratios.reshape(-1, *np.ones(scalarfield1.ndim).astype(int))
+        scalarfields = scalarfield2*ratios + scalarfield1*(1-ratios)
+        isosigns = self.find_isosign(scalarfields)
+        error = self.find_isosign(scalarfield1, isovalues[0])-isosigns
+        error = (error!=0).sum(axis = (1, 2, 3))
+        error, i = np.unique(error, return_index = True)
+        if frames[-1] != frames.max():
+            frames[-1] = frames.max();
+        if frames[0] != frames.min():
+            frames[0] = frames.min();
+        return error, frames[i]
 
     def updater(self, frame):
+        transition_function = self.update_mesh if not self.transitions2 else self.update_mesh2
         for active_transition in self.find_active_transitions(frame):
-            self.update_mesh(frame, active_transition)
+            transition_function(frame, active_transition)
 
     def find_active_transitions(self, frame):
-        transition_ranges = np.array([t.get("frames") for t in self.transitions])
+        transition_ranges = np.array([np.array(t.get("frames"))[[0, -1]] for t in self.transitions])
         within_ranges = (frame<=transition_ranges[:, 1])&(frame>=transition_ranges[:, 0])
         return [t for t, w in zip(self.transitions, within_ranges) if w]
         
@@ -264,12 +337,10 @@ class AtomicOrbital(Isosurface):
         limits = transition["frames"]
         duration = np.diff(limits)[0]
         if frame not in range(*[limits[0], limits[1]-1]):
-            print("GOT HERE")
-            print(limits)
             if frame == limits[-1]-1:
-                self.isovalue = transition["isovalues"][1]
-                self.field_func = transition["wavefunctions"][1]
-                self.scalarfield = transition["scalarfields"][1]
+                self.isovalue = transition["isovalues"][-1]
+                self.field_func = transition["wavefunctions"][-1]
+                self.scalarfield = transition["scalarfields"][-1]
             return
         interp = transition["interpolation"]
         fields = transition["scalarfields"]
@@ -277,6 +348,26 @@ class AtomicOrbital(Isosurface):
         factor_end = 1-factor_start
         factors = np.array([factor_start, factor_end]).reshape(2, *[1 for i in range(fields.ndim-1)])
         self.current_isovalue = interp(*transition["isovalues"], duration)[frame-limits[0]]
+        self.current_scalarfield = (factors*fields).sum(0)
+        self.delete_obj(self.obj, delete_collection = False)
+        self.generate_isosurface(transition_field = True)
+
+    def update_mesh2(self, frame, transition):
+        limits = transition["frames"].min(), transition["frames"].max()
+        duration = np.diff(limits)[0]
+        if frame not in range(*[limits[0], limits[-1]]):
+            if frame == limits[-1]:
+                self.isovalue = transition["isovalues"][-1]
+                self.field_func = transition["wavefunctions"][-1]
+                self.scalarfield = transition["scalarfields"][-1]
+            return
+        interp = transition["interpolation"]
+        fields = transition["scalarfields"]
+        ratios = transition["ratios"] #From 0 to 1
+        factor_start = 1-ratios[frame-limits[0]]
+        factor_end = 1-factor_start
+        factors = np.array([factor_start, factor_end]).reshape(2, *[1 for i in range(fields.ndim-1)])
+        self.current_isovalue = transition["isovalues"][frame-limits[0]]
         self.current_scalarfield = (factors*fields).sum(0)
         self.delete_obj(self.obj, delete_collection = False)
         self.generate_isosurface(transition_field = True)
