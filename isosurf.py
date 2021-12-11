@@ -8,7 +8,23 @@ from Bobject import Bobject
 from numba import njit
 import time
 
+def fibonacci_sphere(samples=1000):
+
+    points = []
+    phi = np.pi * (3. - np.sqrt(5.))  # golden angle in radians
+
+    for i in range(samples):
+        y = 1 - (i / float(samples - 1)) * 2  # y goes from 1 to -1
+        radius = np.sqrt(1 - y * y)  # radius at y
+        theta = phi * i  # golden angle increment
+        x = np.cos(theta) * radius
+        z = np.sin(theta) * radius
+        points.append((x, y, z))
+    return np.array(points)
+
 class Isosurface(Bobject):
+    fib_sphere = fibonacci_sphere(1000)
+    
     def __init__(self, *args, **kwargs):
         if "name" not in kwargs:
             kwargs["name"] = "Orbital"
@@ -23,21 +39,17 @@ class Isosurface(Bobject):
         P = (1-t)**3*x[0] + 3*(1-t)**2*t*x[1] +3*(1-t)*t**2*x[2] + t**3*x[3];
         return P; #Note that n plays the role of the frames
 
-    @staticmethod
-    def iso_find2(r, a, field_func, ratios = 1) -> float:
-        print(ratios)
+
+    def iso_find2(self, r, a, field_func, ratios = 1) -> float:
         if type(ratios) in (float, int):
             ratios = np.array([ratios])
         ratios = np.array(ratios).flatten()
-        phi, theta = np.mgrid[.05:np.pi:30j, 0:np.pi*2:60j];
-        x, y, z = r*np.cos(phi)*np.sin(theta), r*np.sin(theta)*np.sin(phi), r*np.cos(theta);
-        x, y, z = [i.reshape(30, 60, 1) for i in (x, y, z)]
-        xyz = np.concatenate((x, y, z), axis = 2).reshape(-1, 1, 3); #All points in a sphere
-        d = xyz - a;
-        phi = np.arctan2(d[..., 1], d[..., 0])
-        theta = np.arctan2(np.linalg.norm(d[..., :2], axis=2), d[..., 2]);
-        r = np.linalg.norm(d, axis = 2)
-        values = (field_func(r, theta, phi)*ratios/np.linalg.norm(ratios)).sum(axis=1);
+        xyz = self.fib_sphere.copy().reshape(-1, 3)*r; #All points in a sphere
+        d = xyz - np.array(a).reshape(-1, 1, 3);
+        phi = np.arctan2(d[..., 1], d[..., 0]);
+        theta = np.arctan2(np.linalg.norm(d[..., :2], axis=-1), d[..., 2]);
+        r = np.linalg.norm(d, axis = -1);
+        values = (field_func(r, theta, phi)*ratios[:, None]).sum(axis=0);
         return max(abs(values.max()), abs(values.min()))
 
     @classmethod
@@ -402,4 +414,28 @@ class AtomicOrbital(Isosurface):
             self._scalarfield = value
 
     
+class MolecularOrbital(AtomicOrbital):
+    def __init__(self, r, n, field_func, position = np.zeros(3), atom_positions = np.zeros((1, 3)), LC = None, *args, **kwargs):
+        super().__init__(r, n, field_func=field_func, position = position, *args, **kwargs)
+        self.position = np.array(position)
+        self.atom_positions = np.array(atom_positions)
+        self.field_func = field_func
+        if LC is None:
+            LC = np.ones(len(self.atom_positions))
+        self.LC = LC
+        self.atomic_orbitals = [
+            AtomicOrbital(r = r,
+                          n = n,
+                          isovalue = None,
+                          position = p,
+                          coeff = coeff,
+                          field_func = field_func, *args, **kwargs)
+            for p, coeff in zip(atom_positions, LC)
+            ]
+        self.scalarfield = np.array([
+            a.scalarfield for a in self.atomic_orbitals]).sum(0)
+        self.isovalue = self.iso_find2(r, atom_positions, field_func, ratios = LC)
 
+    
+        
+        
