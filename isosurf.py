@@ -200,10 +200,10 @@ class AtomicOrbital(Isosurface):
         self.n = n
         self.coeff = coeff #Coefficient that multiplies the wavefunction
         self.grid = self.generate_grid(self.r, self.n)
+        self._field_func = field_func #Wavefunction that takes r theta and phi as arguments
+        self._transform_function = lambda atom_pos: np.eye(3)
+        self._transform = np.eye(3)
         self.position = np.array(position)
-        self.field_func = field_func #Wavefunction that takes r theta and phi as arguments
-        self.transform_function = lambda atom_pos: np.eye(3)
-        self.transform = None
         if isovalue is None:
             self.isovalue = self.iso_find2(self.r, self.field_func, ratios = 1, atoms = self.position)
         else:
@@ -214,6 +214,29 @@ class AtomicOrbital(Isosurface):
         self.transitions = []
         self.transitions2 = False
         self.add_updater(self.updater)
+        
+    @property
+    def field_func(self):
+        return lambda *args, **kwargs: self.coeff*self._field_func(*args, **kwargs)
+
+    @field_func.setter
+    def field_func(self, func):
+        self._field_func = func
+        self._scalarfield = self.apply_field(self.field_func)
+
+    @property
+    def scalarfield(self):
+        return self._scalarfield
+
+    @scalarfield.setter
+    def scalarfield(self, value):
+        if value is None:
+            self._update_scalarfield()
+        else:
+            self._scalarfield = value
+            
+    def _update_scalarfield(self):
+        self._scalarfield = self.apply_field(self.field_func)
 
     @property
     def transform(self):
@@ -228,8 +251,7 @@ class AtomicOrbital(Isosurface):
         else:
             self.transform_function = value
             self._transform = value(self.position)
-            
-        self.scalarfield = None #update scalarfield
+        self._update_scalarfield()
 
     def mean_inside_cloud(self, cloud, isovalue):
         return np.abs(cloud[np.abs(cloud) > isovalue]).mean()
@@ -258,8 +280,7 @@ class AtomicOrbital(Isosurface):
         self.transitions.append(transition)
         self.set_frame(final_frame)
             
-        
-
+    
     def find_isosign(self, scalarfield, isovalue = None):
         if isovalue is None:
             isovalue = self.isovalue
@@ -315,25 +336,6 @@ class AtomicOrbital(Isosurface):
         theta = np.arctan2(np.linalg.norm(d[..., :2], axis = -1), d[..., 2])
         return wavefunction(dist, theta, phi)
         
-
-    @property
-    def field_func(self):
-        return self._field_func
-
-    @field_func.setter
-    def field_func(self, func):
-        self._field_func = lambda *args, **kwargs: self.coeff*func(*args, **kwargs)
-
-    @property
-    def scalarfield(self):
-        return self._scalarfield
-
-    @scalarfield.setter
-    def scalarfield(self, value):
-        if value is None:
-            self._scalarfield = self.apply_field(self.field_func)
-        else:
-            self._scalarfield = value
 
     
 class MolecularOrbital(AtomicOrbital):
