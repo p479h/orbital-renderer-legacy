@@ -6,6 +6,9 @@ except:
 from numba import njit, jit
 from scipy.integrate import tplquad;
 from scipy.optimize import minimize;
+from scipy.special import assoc_laguerre, lpmv, sph_harm
+from math import factorial
+
 try:
     from pytessel import PyTessel
 except:
@@ -152,66 +155,65 @@ def fx3yx2(r, theta, phi):
 
 functions = [s1, px, py, pz, dz2, dxz, dyz, dx2y2, dxy, px, dz2, fy3x2y2, fxyz, fyz2, fz3, fxz2, fzx2y2, fx3yx2]
 
+##Now we do some ivo stuff
+def from_quantum_numbers(n,l,m):
+    """
+    Construct the wave function
+    """
+    return lambda r, phi, theta: radial(n,l,r) * angular(l,m,theta,phi) * r
+
+def angular(l,m,theta,phi):
+    """
+    Construct the angular part of the wave function
+    """
+    # see: https://en.wikipedia.org/wiki/Spherical_harmonics#Real_form
+    #
+    # this create so-called Tesseral spherical harmonics
+    #
+    if m == 0:
+        return np.real(sph_harm(m,l,theta,phi))
+    elif m > 0:
+        return np.real(sph_harm(-m,l,theta,phi) + (-1)**m * sph_harm(m,l,theta,phi)) / np.sqrt(2.0)
+    return np.imag(sph_harm(m,l,theta,phi) - (-1)**m * sph_harm(-m,l,theta,phi)) / np.sqrt(2.0)
+    
+def radial(n,l,r):
+    """
+    This is the formulation for the radial wave function as encountered in
+    Griffiths "Introduction to Quantum Mechanics 3rd edition"
+    """
+    a = 1.0
+    rho = 2.0 * r / (n * a)
+    val =  np.sqrt((2.0 / (n * a))**3) * \
+           np.sqrt(factorial(n - l - 1) / (2 * n * factorial(n + l))) * \
+           np.exp(-0.5 * rho) * \
+           rho**l * \
+           assoc_laguerre(rho, n-l-1, 2*l+1)
+    return val
+
+def azimuthal(m, phi):
+    """
+    Construct azimuthal part of the angular wave function
+    """
+    pre = 1.0 / np.sqrt(4.0 * np.pi)
+    if m == 0:
+        return pre;
+    if(m > 0):
+        return pre * np.cos(m * phi)
+    return pre * np.sin(-m * phi)
+
+def polar(l,m,theta,phi):
+    """
+    Construct polar part of the angular wave function
+    """
+    pre = np.sqrt((2 * l + 1) * factorial(l - np.abs(m)) /\
+                  factorial(l + np.abs(m)))
+    return pre * lpmv(np.abs(m), l, np.cos(theta))
+
+
 #@jit(nopython = True, cache = True, nogil=True)
 def binatodeci(binary):
     return np.array([binary[i]*2**i for i in range(len(binary))]).sum();
 
-
-def find_limiting_radius(orbital_func, chance = 0.9):
-    def integral_func(r, theta, phi):
-        return orbital_func(r, theta, phi)**2 * r**2 * np.sin(theta);
-
-    def error_func(r, chance):
-        print(r, tplquad(integral_func, 0, np.pi*2, 0, np.pi, 0, r)[0], orbital_func(r, 0, 0))
-        return np.abs(tplquad(integral_func, 0, np.pi*2, 0, np.pi, 0, r)[0] - chance);
-
-    return minimize(lambda r: error_func(r, chance), 0.1);
-
-#print(find_limiting_radius(S1));
-
-def grad(point, atoms, field_func, ratios, change = 1e-7):
-    #Here field func refers to the orbital function!
-    pointDx = point + change*np.eye(3);
-    xyz = np.vstack((point, pointDx));
-    d = atoms.reshape(-1, 1, 3) - xyz;
-    r = np.linalg.norm(d, axis = 2);
-    phi = np.arctan2(d[:, :, 1], d[:, :, 0]);
-    theta = np.arctan2(d[:, :, 2], np.linalg.norm(d[:, :, :2], axis = 2));
-    values = (field_func(r, theta, phi)*ratios.reshape(-1, 1)).sum(axis = 0) #Sum for all atoms;
-    #Now values is a 1D array where the index corresponds to the function evaluation at the points
-    changes = np.array([values[i]-values[0] for i in range(1, 4)])/change;
-    gradient = changes/np.linalg.norm(changes);
-    if len(gradient.shape)>1:
-        print("Problem with gradient");
-        print(gradient);
-        print("Is the gradient");
-    return gradient; #This is actually supposed to be normal to the isosurface
-    
-    
-@jit(nopython = True, cache = True, nogil=True)
-def field_func(verts, atoms, iso_function, ratios):
-    values = np.zeros(len(verts))
-    for i, v in enumerate(verts):
-        d = v - atoms;
-        r = np.sqrt((d**2).sum(axis = 1));
-        theta = np.arccos(d[:, -1]/r);
-        phi = np.arctan2(d[:, 1], d[:, 0]);
-        #theta2 = np.arccos(atoms[:, 2]/((atoms**2)).sum(axis = 1)**(1/2)) - np.pi/2
-        #phi2 = np.arctan2(atoms[:, 1], atoms[:, 0]);
-        values[i] = ((iso_function(r, theta , phi)*ratios/(ratios**2).sum()**(1/2)).sum())
-    return values;
-
-
-#Does not work because pytessel is not available.
-def make_isosurface_ivo(xyz,value, ratios, orbital_func, molecule):
-    verts = xyz;
-    d = verts - molecule.reshape(-1, 1, 1, 1, 3);
-    r = np.linalg.norm(d, axis = 4);
-    phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
-    theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2]);
-    scalarfield = (orbital_func(r, theta, phi)*(ratios/np.linalg.norm(ratios)).reshape(-1, 1, 1, 1, 1)).sum(axis = 0).reshape(-1, 3);
-    unitcell = np.diag(np.ones(3)*(xyz.max() - xyz.min()));
-    return pytessel.marching_cubes(scalarfield.flatten(), scalarfield.shape, unitcell.flatten(), value)
 
 
 @jit(nopython = True, cache = True, nogil=True)

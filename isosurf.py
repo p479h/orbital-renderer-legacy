@@ -1,9 +1,13 @@
 import numpy as np
 import wavefunctions
-import bpy
-import mathutils
+try:
+    import bpy
+    import mathutils
+except:
+    None
 from skimage.measure import marching_cubes
 from scipy.interpolate import interp1d
+from scipy.special import binom
 from Bobject import Bobject
 from numba import njit
 import time
@@ -35,50 +39,40 @@ class Isosurface(Bobject):
     @staticmethod
     def bezier(start, finish, n = 30) -> np.ndarray:
         t = np.linspace(0, 1, n);
-        x = np.array([start, start, finish, finish]);
-        P = (1-t)**3*x[0] + 3*(1-t)**2*t*x[1] +3*(1-t)*t**2*x[2] + t**3*x[3];
+        x = np.array([start, start, finish, finish])[..., np.newaxis];
+        i = np.arange(4).reshape(4, *[1 for i in range(x.ndim-1)])
+        P = np.sum(binom(3, i)*(1-t)**(3-i) * t**i * x, axis = 0);
         return P; #Note that n plays the role of the frames
 
+    @staticmethod
+    def linear(start, finish, n = 30) -> np.ndarray:
+        return np.linspace(start, finish, n)
 
-    def iso_find2(self, r, a, field_func, ratios = 1) -> float:
+    @staticmethod
+    def cart_to_spherical(xyz):
+        "xyz is a vector with xyz coordinates in the last dimension"
+        phi = np.arctan2(xyz[..., 1], xyz[..., 0]);
+        theta = np.arctan2(np.linalg.norm(xyz[..., :2], axis=-1), xyz[..., 2]);
+        r = np.linalg.norm(xyz, axis = -1);
+        return r, phi, theta
+
+
+    @classmethod
+    def iso_find2(cls, r, field_func, ratios = 1, atoms = None) -> float:
+        """
+            Finds maximum isovalue in a sphere when field_func is applied"""
         if type(ratios) in (float, int):
             ratios = np.array([ratios])
         ratios = np.array(ratios).flatten()
-        xyz = self.fib_sphere.copy().reshape(-1, 3)*r; #All points in a sphere
-        d = xyz - np.array(a).reshape(-1, 1, 3);
-        phi = np.arctan2(d[..., 1], d[..., 0]);
-        theta = np.arctan2(np.linalg.norm(d[..., :2], axis=-1), d[..., 2]);
-        r = np.linalg.norm(d, axis = -1);
+        xyz = cls.fib_sphere.reshape(-1, 3)*r; #All points in a sphere
+        if not (atoms is None):
+            d = xyz - np.array(atoms).reshape(-1, 1, 3);
+        else:
+            d = xyz[np.newaxis,...]
+        r, phi, theta = cls.cart_to_spherical(d)
         values = (field_func(r, theta, phi)*ratios[:, None]).sum(axis=0);
-        return max(abs(values.max()), abs(values.min()))
+        return np.max(np.abs(values))
 
-    @classmethod
-    def iso_find_mean(cls, grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> float:
-        return np.abs(cls.apply_field(grid, molecule, orbital_func, molecule_mat, inv, SALC, orbital_orientation_function)).mean();
-
-    @classmethod
-    def iso_find_mean2(cls, grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> float:
-        return (np.abs(cls.apply_field(grid, molecule, orbital_func, molecule_mat, inv, SALC, orbital_orientation_function))**.5).mean()**2;
-
-    @classmethod
-    def iso_find_vert(cls, Npoints, grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3), resolution = 100) -> float:
-        scalarfield = cls.apply_field(grid, molecule, orbital_func, molecule_mat=molecule_mat, inv=inv, SALC=SALC, orbital_orientation_function = orbital_orientation_function)
-        r = grid.max();
-        n = len(grid);
-        spacing = np.full(3, r*2/(n-1));
-        def errorFunc(iso_guess):
-            try:
-                vertices, faces, normals, values = marching_cubes(scalarfield.sum(0), level = iso_guess[0], spacing = spacing);
-                n_points = len(vertices)
-            except Exception as f:
-                n_points = -1;
-            return n_points
-        iso_guesses = np.linspace(0, 1, resolution).reshape(-1, 1);
-        counts = np.array([errorFunc(i) for i in iso_guesses])
-        lims = iso_guesses[counts>0, :].min(), iso_guesses[counts>0, :].max()
-        iso_guesses2 = np.linspace(*lims, resolution).reshape(-1, 1);
-        counts = np.array([errorFunc(i) for i in iso_guesses2])
-        return iso_guesses2[np.argmin(np.abs(counts - Npoints))]
     
     @staticmethod
     def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
@@ -101,11 +95,9 @@ class Isosurface(Bobject):
         grid_transformed = np.einsum("aef,abcdfe->abcde", orientation_matrices, (grid-molecule.reshape(-1, 1, 1, 1, 3))[..., np.newaxis])+molecule.reshape(-1, 1, 1, 1, 3)
         d = grid_transformed - (molecule_mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32);
         dist = np.linalg.norm(d, axis = 4)
-        phi = np.arctan2(d[:, :, :, :, 1], d[:, :, :, :, 0]);
-        theta = np.arctan2(np.linalg.norm(d[:, :, :, :, :2], axis = 4), d[:, :, :, :, 2])
+        phi = np.arctan2(d[..., 1], d[..., 0]);
+        theta = np.arctan2(np.linalg.norm(d[..., :2], axis = 4), d[..., 2])
         return orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
-
-
 
     @staticmethod
     def generate_grid(r: float, n: int) -> np.ndarray:
@@ -113,9 +105,9 @@ class Isosurface(Bobject):
             returns 4d grid with points inside square of side length 2r and n points along each dimension (x,y,z)
             indexing follows (x, y, z, [x,y,z])
         """
-        X, Y, Z = np.mgrid[-r:r:(n*1j),-r:r:(n*1j),-r:r:(n*1j)];
-        x, y, z = [i.reshape(n, n, n, 1) for i in (X, Y, Z)];
-        return np.concatenate((x, y, z), axis = 3).astype(np.float32);
+        grids = np.meshgrid(*[np.linspace(-r, r, n) for i in range(3)], indexing = "ij")
+        grids = [i[..., None] for i in grids]
+        return np.concatenate(grids, axis = 3).astype(np.float32);
     
     def make_orbital_material(self, sign, copy = True, ivo = False):
         A = {"p":"positive", "n": "negative"}[sign]
@@ -185,7 +177,7 @@ class Isosurface(Bobject):
             try:
                 vertices, faces, normals, values = marching_cubes(scalarfield, level = isovalue, spacing = spacing)
             except Exception as f: #If the isovalue is too high/low to begin with:
-                print(f)
+                print(f, "Could not render orbital. Consider changing isovalue.")
                 vertices = np.array([[0, 0, 0]]);
                 normals = np.array([]);
                 faces = np.array([]);
@@ -213,7 +205,7 @@ class AtomicOrbital(Isosurface):
         self.transform_function = lambda atom_pos: np.eye(3)
         self.transform = None
         if isovalue is None:
-            self.isovalue = self.iso_find2(self.r, self.position, self.field_func, 1)
+            self.isovalue = self.iso_find2(self.r, self.field_func, ratios = 1, atoms = self.position)
         else:
             self.isovalue = isovalue
         self.scalarfield = None
@@ -239,16 +231,19 @@ class AtomicOrbital(Isosurface):
             
         self.scalarfield = None #update scalarfield
 
-    def add_transition(self, isovalue = None, duration = 59, wavefunction = wavefunctions.dz2):
+    def mean_inside_cloud(self, cloud, isovalue):
+        return np.abs(cloud[np.abs(cloud) > isovalue]).mean()
+
+    def add_transition(self, isovalue = None, duration = 59, wavefunction = wavefunctions.dz2, interpolation = None):
         if isovalue is None:
-            isovalue = self.iso_find2(self.r, self.position, wavefunction, 1)
-            final_frame = self.get_current_frame() + duration
+            isovalue = self.iso_find2(self.r, wavefunction, 1, self.position)
+        final_frame = self.get_current_frame() + duration
         if len(self.transitions) > 0:
             last_transition = self.transitions[-1]
-            f1, i1, sf1, ff1 = last_transition["frames"][1], \
-                            last_transition["isovalues"][1], \
-                            last_transition["scalarfields"][1], \
-                            last_transition["wavefunctions"][1];
+            f1, i1, sf1, ff1 = self.get_current_frame(), \
+                            last_transition["isovalues"][-1], \
+                            last_transition["scalarfields"][-1], \
+                            last_transition["wavefunctions"][-1];
         else:
             f1, i1, sf1, ff1 = self.get_current_frame(), \
                              self.isovalue, \
@@ -258,49 +253,12 @@ class AtomicOrbital(Isosurface):
             "frames": [f1, final_frame],
             "isovalues": [i1, isovalue],
             "scalarfields": np.array([sf1, self.apply_field(wavefunction)]),
-            "interpolation": self.bezier,
+            "interpolation": self.linear if interpolation is None else interpolation,
             "wavefunctions": [ff1, wavefunction]}
         self.transitions.append(transition)
         self.set_frame(final_frame)
+            
         
-    def add_transition2(self, isovalue = None, duration = 59, wavefunction = wavefunctions.dz2):
-        self.transitions2 = True
-        if isovalue is None:
-            isovalue = self.iso_find2(self.r, self.position, wavefunction, 1)
-            final_frame = self.get_current_frame() + duration
-        if len(self.transitions) > 0:
-            last_transition = self.transitions[-1]
-            f1, i1, sf1, ff1 = last_transition["frames"][-1], \
-                            last_transition["isovalues"][-1], \
-                            last_transition["scalarfields"][-1], \
-                            last_transition["wavefunctions"][-1];
-        else:
-            f1, i1, sf1, ff1 = self.get_current_frame(), \
-                             self.isovalue, \
-                             self.scalarfield, \
-                             self.field_func
-        frames = np.arange(f1, final_frame)
-        scalarfields = np.array([sf1, self.apply_field(wavefunction)])
-        isovalues = np.array([i1, isovalue])
-        frames_err = frames.copy()
-        if len(frames) < 400:
-            frames_err = np.linspace(*frames[[0, -1]], 400) 
-        errors, frames_err = self.find_errors_in_cloud(frames_err, *scalarfields, isovalues)
-        t_func = interp1d(errors, frames_err, kind = "linear")
-        ltimes = t_func( #linearized times
-            self.bezier(errors.min(), errors.max(), len(frames)))
-        ratios = (ltimes - ltimes.min())/(ltimes - ltimes.min()).max() #From 0 to 1
-        isovalues = ratios*isovalue + (1-ratios)*i1
-        
-        transition = {
-            "frames": frames,
-            "isovalues": isovalues,
-            "ratios": ratios,
-            "scalarfields": scalarfields,
-            "interpolation": self.bezier,
-            "wavefunctions": [ff1, wavefunction]}
-        self.transitions.append(transition)
-        self.set_frame(final_frame)
 
     def find_isosign(self, scalarfield, isovalue = None):
         if isovalue is None:
@@ -316,26 +274,9 @@ class AtomicOrbital(Isosurface):
 
         return (scalarfield > isovalue)+(scalarfield < -isovalue)*-1
 
-    def find_errors_in_cloud(self, frames, scalarfield1, scalarfield2, isovalues):
-        frames = np.array(frames)
-        frames = frames - frames.min()
-        ratios = frames/frames.max() #Now we go from 0 to 1
-
-        #WE need 1 error per ratio
-        ratios = ratios.reshape(-1, *np.ones(scalarfield1.ndim).astype(int))
-        scalarfields = scalarfield2*ratios + scalarfield1*(1-ratios)
-        isosigns = self.find_isosign(scalarfields)
-        error = self.find_isosign(scalarfield1, isovalues[0])-isosigns
-        error = (error!=0).sum(axis = (1, 2, 3))
-        error, i = np.unique(error, return_index = True)
-        if frames[-1] != frames.max():
-            frames[-1] = frames.max();
-        if frames[0] != frames.min():
-            frames[0] = frames.min();
-        return error, frames[i]
 
     def updater(self, frame):
-        transition_function = self.update_mesh if not self.transitions2 else self.update_mesh2
+        transition_function = self.update_mesh
         for active_transition in self.find_active_transitions(frame):
             transition_function(frame, active_transition)
 
@@ -346,6 +287,7 @@ class AtomicOrbital(Isosurface):
         
 
     def update_mesh(self, frame, transition):
+        print("THis update mesh is being called")
         limits = transition["frames"]
         duration = np.diff(limits)[0]
         if frame not in range(*[limits[0], limits[1]-1]):
@@ -355,32 +297,12 @@ class AtomicOrbital(Isosurface):
                 self.scalarfield = transition["scalarfields"][-1]
             return
         interp = transition["interpolation"]
-        fields = transition["scalarfields"]
+        fields = np.fft.fftn(transition["scalarfields"], axes = (-3, -2, -1))
         factor_start = interp(1, 0, duration)[frame-limits[0]]
         factor_end = 1-factor_start
         factors = np.array([factor_start, factor_end]).reshape(2, *[1 for i in range(fields.ndim-1)])
         self.current_isovalue = interp(*transition["isovalues"], duration)[frame-limits[0]]
-        self.current_scalarfield = (factors*fields).sum(0)
-        self.delete_obj(self.obj, delete_collection = False)
-        self.generate_isosurface(transition_field = True)
-
-    def update_mesh2(self, frame, transition):
-        limits = transition["frames"].min(), transition["frames"].max()
-        duration = np.diff(limits)[0]
-        if frame not in range(*[limits[0], limits[-1]]):
-            if frame == limits[-1]:
-                self.isovalue = transition["isovalues"][-1]
-                self.field_func = transition["wavefunctions"][-1]
-                self.scalarfield = transition["scalarfields"][-1]
-            return
-        interp = transition["interpolation"]
-        fields = transition["scalarfields"]
-        ratios = transition["ratios"] #From 0 to 1
-        factor_start = 1-ratios[frame-limits[0]]
-        factor_end = 1-factor_start
-        factors = np.array([factor_start, factor_end]).reshape(2, *[1 for i in range(fields.ndim-1)])
-        self.current_isovalue = transition["isovalues"][frame-limits[0]]
-        self.current_scalarfield = (factors*fields).sum(0)
+        self.current_scalarfield = np.real(np.fft.ifftn((factors*fields).sum(0), axes = (-3, -2, -1)))
         self.delete_obj(self.obj, delete_collection = False)
         self.generate_isosurface(transition_field = True)
         
@@ -436,6 +358,12 @@ class MolecularOrbital(AtomicOrbital):
             a.scalarfield for a in self.atomic_orbitals]).sum(0)
         self.isovalue = self.iso_find2(r, atom_positions, field_func, ratios = LC)
 
-    
-        
-        
+def apply_field(grid, orbital_func):
+    dist = np.linalg.norm(grid, axis = -1)
+    phi = np.arctan2(grid[..., 1], grid[..., 0]);
+    theta = np.arctan2(np.linalg.norm(grid[..., :2], axis = -1), grid[..., 2])
+    return orbital_func(dist, theta, phi)    
+
+
+
+

@@ -244,6 +244,12 @@ class Bobject: #Blender object
     def get_current_frame():
         return bpy.context.scene.frame_current;
 
+    def skip_frames(self, n):
+        self.set_frame(self.get_current_frame()+n)
+
+    def wait(self, n):
+        self.skip_frames(n)
+
     def set_parents(self, parent, children):
         [self.set_parent(parent, child) for child in children];
 
