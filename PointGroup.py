@@ -94,6 +94,11 @@ class PointGroup:
         ending_orbital = np.argmin(distance);
         return ending_orbital;
 
+    def find_landnig_spots(self, orbitals, matrices, orbital_index = 0):
+        final_orbitals = np.einsum("abc,acd->abd", matrices.reshape(-1, 4, 4), orbitals[[orbital_index], ...])
+        final_orientations = np.einsum("abc,abc->ac", orbitals[[orbital_index], :3, :3], final_orbitals[:3, :3])
+        ## To be continued
+
     def find_projected_p_coeffs(self, orbital, matrix):
         mask = np.eye(4, dtype = bool);
         mask[3, 3] = False;

@@ -16,12 +16,12 @@ import os;
 import json;
 import re;
 
-    
-def load_atoms_data(): 
+
+def load_atoms_data():
     with open("atoms.json", "r") as j_file:
         return json.load(j_file);
 
-    
+
 
 class Atom(Bobject):
     #Defining some data relevant for this class
@@ -29,7 +29,7 @@ class Atom(Bobject):
     radii_list = data["radii"];
     colors = data["atoms"];
     material_dict = {}
-    
+
     # The color and radii will be stored by the class for compatibility with old projects!
     def __init__(self, position = None, radius = None, material = None, name = None):
         """
@@ -90,7 +90,7 @@ class Atom(Bobject):
     def make_orbital_material(self, sign, copy = True, ivo = False):
         A = {"p":"positive", "n": "negative"}[sign]
         try:
-            bpy.data.materials.get(A)#So we can use this class without being in 
+            bpy.data.materials.get(A)#So we can use this class without being in
         except:
             None
         if not bpy.data.materials.get(A) or not copy:
@@ -104,7 +104,7 @@ class Atom(Bobject):
                 rgb = (.8, .33, .11, 1)
                 if ivo:
                     (0.1, 0.419, 0.07, 1)
-            
+
             m.node_tree.nodes["Principled BSDF"].inputs[0].default_value = rgb;
             if bpy.data.scenes["Scene"].render.engine == "BLENDER_EEVEE":
                 m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = .3;
@@ -126,7 +126,7 @@ class Atom(Bobject):
             self.make_material(self.name)
         obj.active_material = self.find_material(self.name);
         obj.name = self.name
-        self.set_obj(obj)
+        self.obj = obj
 
         if smooth or modifier:
             self.smooth(modifier = modifier)
@@ -134,10 +134,10 @@ class Atom(Bobject):
 class Bond(Atom):
     def __init__(self,obj):
         super().__init__()
-        self.set_obj(obj)
-    
-    
-        
+        self.obj = obj
+
+
+
 class Molecule(Atom):
     """
         This class unites many atoms, allowing them to bond and be rendered together
@@ -165,14 +165,14 @@ class Molecule(Atom):
         self.bond_collection = self.make_collection(self.collection, "bonds_"+name) #If we don't add "name", collections with the same name will be created. Since blender does not allow for this, we end up re-referencing exisint collecitons. Not GUT for multiple molecules
         self.atom_collection = self.make_collection(self.collection, "atoms_"+name)
         self.orbital_collection=  self.make_collection(self.collection, "orbitals_"+name)
-        self.outline_materials = []; #Materials used for cartoonish style 
+        self.outline_materials = []; #Materials used for cartoonish style
         self.orbital_indices = np.array([0 for i in range(len(self.position))]).astype(bool);
         self.orbital_meshes = [None for i in range(len(self.position))]; #Meshes of molecular orbitals
         self.orbital_matrices = np.tile(np.eye(4), (len(self.position), 1, 1)); #Matrices of molecular orbitals
         self.orbital_names = [None for i in range(len(self.position))];
         self.orbital_kinds = [None for i in range(len(self.position))];
-        
-    
+
+
     def translate(self, v):
         """
             Translates the molecule by v"""
@@ -207,7 +207,7 @@ class Molecule(Atom):
                 )
             self.position = np.einsum('bc,ac->ab', rotMat, self.position)
         return self
-        
+
     def scale_atoms(self, v, atoms = None):
         if atoms is None:
             atoms = np.ones(len(self.names))
@@ -216,7 +216,7 @@ class Molecule(Atom):
                 continue
             a.scale(v)
         return self
-    
+
     def translate_bond_orders(self, v, bonds = None):
         if bonds is None:
             bonds = np.ones(len(self.names))
@@ -225,7 +225,7 @@ class Molecule(Atom):
                 continue
             b.translate(v)
         return self
-    
+
     def rotate_bonds(self, angles, axes = [0, 0, 1], bonds = None):
         if bonds is None:
             bonds = np.ones(len(self.names))
@@ -249,7 +249,7 @@ class Molecule(Atom):
                 continue
             b.scale(v)
         return self
-    
+
     def translate_atoms(self, v, atoms = None):
         if atoms is None:
             atoms = np.ones(len(self.names))
@@ -258,7 +258,7 @@ class Molecule(Atom):
                 continue
             a.translate(v)
         return self
-    
+
     def rotate_atoms(self, angle, axis = [0, 0, 1], atoms = None):
         if atoms is None:
             atoms = np.ones(len(self.names))
@@ -276,7 +276,7 @@ class Molecule(Atom):
                 continue
             a.set_scale(v)
         return self
-    
+
     def set_position_atoms(self, v, atoms = None):
         if atoms is None:
             atoms = np.ones(len(self.names))
@@ -290,7 +290,7 @@ class Molecule(Atom):
                 continue
             a.set_position(p)
         return self
-    
+
     def set_rotation_atoms(self, angles, axes = [0, 0, 1], atoms = None):
         if atoms is None:
             atoms = np.ones(len(self.names))
@@ -306,7 +306,7 @@ class Molecule(Atom):
                 angle = float(angle)
             a.set_rotation(angle, axis)
         return self
-    
+
     def set_scale_bonds(self, v, bonds = None):
         if bonds is None:
             bonds = np.ones(len(self.names))
@@ -315,7 +315,7 @@ class Molecule(Atom):
                 continue
             b.set_scale(v)
         return self
-    
+
     def set_position_bonds(self, v, bonds = None):
         if bonds is None:
             bonds = np.ones(len(self.names))
@@ -329,7 +329,7 @@ class Molecule(Atom):
                 continue
             b.set_position(p)
         return self
-    
+
     def set_rotation_bonds(self, angles, axes = [0, 0, 1], bonds = None):
         if bonds is None:
             bonds = np.ones(len(self.names))
@@ -357,11 +357,11 @@ class Molecule(Atom):
     def to_quaternion_bonds(self):
         for b in self.bonds:
             b.to_quaternion()
-            
+
     def to_euler_bonds(self):
         for b in self.bonds:
             b.to_euler()
-    
+
 
     def cartoonify(self, edgewidth = 0.03):
         """
@@ -370,7 +370,7 @@ class Molecule(Atom):
         self.outline_materials.append(self.make_outline_material()) # Make the dark outline. The reason we make a copy of the original is because some bonds do not have 2 materials.
         for m in self.material:
             m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = 0.02; #Set the specular to a low value, as that looks weird in EEVEE
-            
+
         for mesh_list in [self.atom_meshes, self.bond_meshes]:
             self.deselect_all();# Deselect everything
             self.select(*mesh_list); # Select the set of objects in question
@@ -383,7 +383,7 @@ class Molecule(Atom):
             bpy.ops.object.make_links_data(type="MODIFIERS");
             for ob in mesh_list:
                 for m in self.outline_materials:
-                    ob.data.materials.append(m);            
+                    ob.data.materials.append(m);
 
 
     @staticmethod
@@ -400,7 +400,7 @@ class Molecule(Atom):
         normals[dots<0]*=-1; #Invert antiparallel.
         avg_norm = np.sum(normals, axis = 0)/np.sqrt(len(normals))
         return avg_norm
-        
+
 
     def make_higher_order_bond(self, bond_index, atom_pair_indices, neighbour_indices = [], order = 2):
         """
@@ -450,7 +450,7 @@ class Molecule(Atom):
         contains_connections = {*connections[np.any(pair[:, np.newaxis, np.newaxis] == connections, axis = (0,2)), :].flatten()}
         return np.array(list({*contains_connections}-{*pair}))
 
-    
+
     def find_static_atoms(self, matrix, tol = 2e-1): # Lower tolerances require better xyz files... But this is good enough for most purpuses
         new_positions = (matrix@self.position.T).T
         r = np.linalg.norm(self.position - new_positions, axis = 1, keepdims = False)
@@ -479,8 +479,8 @@ class Molecule(Atom):
         final_orientations = np.einsum('ij,kjl->kil',mat,self.orbital_matrices);
         projection = (self.orbital_matrices*final_orientations).sum(axis = 1)[:,{"px":0, "x":0,"py":1, "y":1,"pz":2, "z":2}[orb]]
         return remaining*projection #We multiply by remaining because the orbitals that leave their atoms must be set to 0
-    
-        
+
+
     def add_mesh(self, verts, faces, sign = "p", offset = [0, 0, 0], scale = 1): #p is "positive"
         """
             makes a mesh from verts and faces"""
@@ -519,7 +519,7 @@ class Molecule(Atom):
                 faces = np.array([]);
                 values = np.array([]);
             orb = self.add_mesh(vertices - r, faces, sign)
-            orb.active_material = self.make_orbital_material(sign, copy = material_copy);    
+            orb.active_material = self.make_orbital_material(sign, copy = material_copy);
             pair.append(orb)
         self.select(*pair)
         self.set_active(orb)
@@ -534,7 +534,7 @@ class Molecule(Atom):
         grid: (natoms, n, n, n, 3) array with the positions where the wavefunction is evaluated
         isovalue: float with the value where the isosurface is constructed
         material_copy: boolean specifying if every orbital will have it's own instance of the material
-        join: boolean specifying if both positive and negative lobes are joined 
+        join: boolean specifying if both positive and negative lobes are joined
         """
         if MO:
             scalarfields = scalarfield.sum(0, keepdims = True)
@@ -561,9 +561,9 @@ class Molecule(Atom):
             if atom_index is provided, data is incorporated into the object and it can be animated.
             """
         grid = Isosurface.generate_grid(r, n)
-        scalarfield = Isosurface.apply_field(grid, 
-            np.zeros((1, 3)), 
-            orbital_func, 
+        scalarfield = Isosurface.apply_field(grid,
+            np.zeros((1, 3)),
+            orbital_func,
             SALC = [1],
             orbital_orientation_function = orbital_orientation_function)
         orb = self.make_orbital(scalarfield, grid, isovalue, **kwargs);
@@ -574,7 +574,7 @@ class Molecule(Atom):
             self.meshes.append(orb)
             self.orbital_names[atom_index] = "Not None"
         return orb
-    
+
     def make_atomic_orbitals(self, isovalue, orbital_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
         """
             Adds an atomic orbital to the mesh for each orbital where coeff in coeffs != 0
@@ -614,7 +614,7 @@ class Molecule(Atom):
     def set_names(self, atoms):
         self.names = [a.name for a in atoms];
         return self.names;
-    
+
     def set_molecule_name(self, name):
         if name:
             self.name = name;
@@ -634,11 +634,11 @@ class Molecule(Atom):
     @staticmethod
     def load_molecule_data(filepath):
         return fm.load_molecule_data(filepath)
-    
+
     @staticmethod
     def dump_molecule_data(data, filepath):
         fm.dump_molecule_data(data, filepath)
-        
+
 
     #Now onto the rendering part
     def getBondRadius(self, rad):
@@ -666,7 +666,7 @@ class Molecule(Atom):
     @classmethod
     def read_smol(cls, path):
         return fm.read_smol(path)
-    
+
     @classmethod
     def read_xyz(cls, path):
         return fm.read_xyz(path)
@@ -674,7 +674,7 @@ class Molecule(Atom):
     @classmethod
     def read_mol(cls, path):
         return fm.read_mol(path)
-    
+
     @classmethod
     def from_smol_file(cls, path, *args, **kwargs):
         names, positions, bonds = cls.read_smol(path);
@@ -702,13 +702,13 @@ class Molecule(Atom):
         for a, r in zip(self.atoms, rad):
             a._set_radius(r)
             a.draw(smooth = smooth, modifier = True)
-            obj = a.get_obj()
+            obj = a.obj
             self.atom_meshes.append(obj);
             self.meshes.append(obj);
             self.unlink_obj(obj);
             self.link_obj(obj, self.atom_collection);
         return self.meshes
-            
+
     def get_smaller_radii(self, radius, s = 0.70):
         rad=np.array(radius).copy();
         rad[rad>self.radii_list["Fe"]*s] = self.radii_list["Fe"]*s;
@@ -763,7 +763,7 @@ class Molecule(Atom):
             self.link_obj(obj, self.bond_collection)
             self.set_origin(obj)
             self.bonds.append(Bond(obj))
-            
+
 
 
     def dieting(self, stick_factor, apply = True):
@@ -775,7 +775,7 @@ class Molecule(Atom):
             self.apply_transform(a, scale = apply)
 
 
-    
+
     def draw(self, mirror_options={}, rotation_axis_options={}, stick = False, mirror = True, rotation_axis = True, prettify_radii = True, show_double_bonds = True, cartoonish = False, stick_factor = 0.5):
         """
             Creates all the meshes.
@@ -787,7 +787,7 @@ class Molecule(Atom):
             stick means stick and ball model. It is used to give emphasis to the orbitals instead of atoms themselves
         """
         self.mule = self.make_empty()
-        
+
         self.make_atom_meshes(prettify_radii = prettify_radii);
         self.make_cylinder_meshes(prettify_radii = prettify_radii, cartoonish = cartoonish);
 
@@ -797,10 +797,10 @@ class Molecule(Atom):
                     continue
                 elif o < 4: #We can not have 4 bonds!!!
                     self.make_higher_order_bond(i, self.connections[i], self.find_neighbours(self.connections[i]), order = o);
-                    
+
         if stick: #Stick has to come after show_double_bonds
             self.dieting(stick_factor, apply = True)
-                
+
         if cartoonish:
             self.cartoonify(edgewidth = .02);
             self.switch_render_engine("BLENDER_EEVEE");
@@ -813,7 +813,7 @@ class Molecule(Atom):
             self.select(*self.meshes);
             self.set_active(self.mule);
             bpy.ops.object.parent_set(type="OBJECT");
-            
+
         #Note that the mirror and rotation axis are not parented as they would suffer deformations during the animations.
         if mirror:
             self.make_mirror(mirror_options, prettify_radii = prettify_radii);
@@ -827,7 +827,7 @@ class Molecule(Atom):
     def draw_mpl(self, ax):
         for b in self.connections:
             ax.plot(*(self.position[np.array(b)]).T, c = "black");
-            
+
         for a in set(self.names):
             indices = [i for i, n in enumerate(self.names) if n == a];
             points = np.array([self.position[i] for i in indices])
@@ -982,7 +982,7 @@ class Molecule(Atom):
 
     def rotation_to(self, v2, v1 = [0, 0, 1]):
         """
-        Rotation from v1 to v2 in quaternion mode 
+        Rotation from v1 to v2 in quaternion mode
         """
         v1, v2 = np.array(v1)/np.linalg.norm(v1), np.array(v2)/np.linalg.norm(v2);
         axis = np.cross(v1, v2);
@@ -1027,7 +1027,7 @@ class Molecule(Atom):
 
         self.add_transition("scale", self.rotation_axis, t0 + sp, tt, [0, 0, 0], [1, 1, 1])
         self.add_transition("scale", self.rotation_axis, tf - tt, tt, [1, 1, 1], [0, 0, 0]);
-        
+
         #Animating the actual rotation of the carrier
         rot_init = parent_mule.rotation_quaternion.copy();
         rot = rot_init.copy()
@@ -1041,7 +1041,7 @@ class Molecule(Atom):
             scales = np.abs(self.find_final_projections(mat, orb = orbitals))[self.find_static_atoms(mat).astype(bool)]
             meshes_in_place = [self.orbital_meshes[i] for i, stayed in enumerate(in_place) if stayed]
             fading_meshes = [mesh for mesh in self.orbital_meshes if mesh not in meshes_in_place and mesh]
-            
+
             t2 = int(tt/2)
             for i, mesh in enumerate(meshes_in_place):
                 #Making them shine
@@ -1051,7 +1051,7 @@ class Molecule(Atom):
                 #Making them SMOL
                 self.add_transition("scale", mesh, t0 + t2, t2, [1]*3, [scales[i]]*3)
                 self.add_transition("scale", mesh, tf - t2, t2, [scales[i]]*3, [1]*3)
-                
+
             for mesh in fading_meshes:
                 #Initial fade out
                 self.add_material_transition("alpha", mesh, t0 + t2, t2, 1, .5)
@@ -1061,7 +1061,7 @@ class Molecule(Atom):
         self.set_ending(tf);
         return tf; #Returns the end of this animation
 
-            
+
 
     def animate_reflection(self, t0, normal, orbitals = "pz"):
         """
@@ -1108,7 +1108,7 @@ class Molecule(Atom):
                 #Making them SMOL
                 self.add_transition("scale", mesh, t0 + t2, t2, [1]*3, [scales[i]]*3)
                 self.add_transition("scale", mesh, tf - t2, t2, [scales[i]]*3, [1]*3)
-                
+
             for mesh in fading_meshes:
                 #Initial fade out
                 self.add_material_transition("alpha", mesh, t0 + t2, t2, 1, .5)
@@ -1175,7 +1175,7 @@ class Molecule(Atom):
                 #Making them SMOL
                 self.add_transition("scale", mesh, t0 + t2, t2, [1]*3, [scales[i]]*3)
                 self.add_transition("scale", mesh, tf - t2, t2, [scales[i]]*3, [1]*3)
-                
+
             for mesh in fading_meshes:
                 #Initial fade out
                 self.add_material_transition("alpha", mesh, t0 + t2, t2, 1, .5)
@@ -1247,7 +1247,7 @@ class Molecule(Atom):
                 #Making them SMOL
                 self.add_transition("scale", mesh, t0 + t2, t2, [1]*3, [scales[i]]*3)
                 self.add_transition("scale", mesh, tf - t2, t2, [scales[i]]*3, [1]*3)
-                
+
             for mesh in fading_meshes:
                 #Initial fade out
                 self.add_material_transition("alpha", mesh, t0 + t2, t2, 1, 0)
@@ -1306,6 +1306,3 @@ class Molecule(Atom):
         for n, v in zip(names, vertices):
             f.write('%s  %12.6f  %12.6f  %12.6f\n' % (n, *v));
         f.close()
-
-    
-

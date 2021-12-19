@@ -13,27 +13,21 @@ from numba import njit
 import time
 
 def fibonacci_sphere(samples=1000):
-
-    points = []
     phi = np.pi * (3. - np.sqrt(5.))  # golden angle in radians
-
-    for i in range(samples):
-        y = 1 - (i / float(samples - 1)) * 2  # y goes from 1 to -1
-        radius = np.sqrt(1 - y * y)  # radius at y
-        theta = phi * i  # golden angle increment
-        x = np.cos(theta) * radius
-        z = np.sin(theta) * radius
-        points.append((x, y, z))
-    return np.array(points)
+    i = np.arange(samples)
+    y = 1 - (i/(samples-1))*2
+    r = np.sqrt(1 - y**2)
+    x, z = np.cos(phi*i)*r, np.sin(phi*i)*r
+    return np.array([x, y, z]).T
 
 class Isosurface(Bobject):
     fib_sphere = fibonacci_sphere(1000)
-    
+
     def __init__(self, *args, **kwargs):
         if "name" not in kwargs:
             kwargs["name"] = "Orbital"
             self.name = kwargs["name"]
-        super().__init__(self, *args, **kwargs);
+        super().__init__(*args, **kwargs);
         self.collection = self.make_collection(name = self.name)
 
     @staticmethod
@@ -73,7 +67,7 @@ class Isosurface(Bobject):
         values = (field_func(r, theta, phi)*ratios[:, None]).sum(axis=0);
         return np.max(np.abs(values))
 
-    
+
     @staticmethod
     def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
         """
@@ -82,7 +76,7 @@ class Isosurface(Bobject):
         mat: matrix applied to the molecule (such as a rotation)
         orbital_func: function to be applied to the molecule to generate field
         orbital_orientation_function is a function which takes the position of each atom as an argument and returns a corresponding linear transformation for its orbital to be applied to it's field
-        
+
         returns 4d array with the following indices (atom, x, y, z, xyz) -> field value at cooresponding index in xyz
         to get the overall field, add along dimension 0
         """
@@ -108,11 +102,11 @@ class Isosurface(Bobject):
         grids = np.meshgrid(*[np.linspace(-r, r, n) for i in range(3)], indexing = "ij")
         grids = [i[..., None] for i in grids]
         return np.concatenate(grids, axis = 3).astype(np.float32);
-    
+
     def make_orbital_material(self, sign, copy = True, ivo = False):
         A = {"p":"positive", "n": "negative"}[sign]
         try:
-            bpy.data.materials.get(A)#So we can use this class without being in 
+            bpy.data.materials.get(A)#So we can use this class without being in
         except:
             None
         if not bpy.data.materials.get(A) or not copy:
@@ -126,7 +120,7 @@ class Isosurface(Bobject):
                 rgb = (.8, .33, .11, 1)
                 if ivo:
                     (0.1, 0.419, 0.07, 1)
-            
+
             m.node_tree.nodes["Principled BSDF"].inputs[0].default_value = rgb;
             if bpy.data.scenes["Scene"].render.engine == "BLENDER_EEVEE":
                 m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = .3;
@@ -150,12 +144,12 @@ class Isosurface(Bobject):
         new_mesh.update()
         new_object = bpy.data.objects.new('Orbital', new_mesh)
         self.link_obj(new_object, self.collection)
-        self.set_obj(new_object)
+        self.obj = new_object
         self.set_active(new_object)
         self.smooth()
         self.set_origin(new_object);
         return new_object;
-    
+
     def generate_isosurface(self, material_copy = True, center_origin = True, transition_field = False):
         """
         Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
@@ -183,19 +177,19 @@ class Isosurface(Bobject):
                 faces = np.array([]);
                 values = np.array([]);
             orb = self.make_mesh(vertices - r, faces, sign)
-            orb.active_material = self.make_orbital_material(sign, copy = material_copy);    
+            orb.active_material = self.make_orbital_material(sign, copy = material_copy);
             pair.append(orb)
         self.select(*pair)
         self.set_active(orb)
         bpy.ops.object.join();
         self.set_origin(orb);
-        self.set_obj(orb)
+        self.obj = orb
         self.mesh = orb
-        return orb        
+        return orb
 
 class AtomicOrbital(Isosurface):
     def __init__(self, r = 10, n = 30, isovalue = None, position = [0, 0, 0], coeff = 1, field_func = wavefunctions.pz, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.r = r
         self.n = n
         self.coeff = coeff #Coefficient that multiplies the wavefunction
@@ -214,7 +208,7 @@ class AtomicOrbital(Isosurface):
         self.transitions = []
         self.transitions2 = False
         self.add_updater(self.updater)
-        
+
     @property
     def field_func(self):
         return lambda *args, **kwargs: self.coeff*self._field_func(*args, **kwargs)
@@ -234,7 +228,7 @@ class AtomicOrbital(Isosurface):
             self._update_scalarfield()
         else:
             self._scalarfield = value
-            
+
     def _update_scalarfield(self):
         self._scalarfield = self.apply_field(self.field_func)
 
@@ -279,8 +273,8 @@ class AtomicOrbital(Isosurface):
             "wavefunctions": [ff1, wavefunction]}
         self.transitions.append(transition)
         self.set_frame(final_frame)
-            
-    
+
+
     def find_isosign(self, scalarfield, isovalue = None):
         if isovalue is None:
             isovalue = self.isovalue
@@ -305,7 +299,7 @@ class AtomicOrbital(Isosurface):
         transition_ranges = np.array([np.array(t.get("frames"))[[0, -1]] for t in self.transitions])
         within_ranges = (frame<=transition_ranges[:, 1])&(frame>=transition_ranges[:, 0])
         return [t for t, w in zip(self.transitions, within_ranges) if w]
-        
+
 
     def update_mesh(self, frame, transition):
         print("THis update mesh is being called")
@@ -326,7 +320,7 @@ class AtomicOrbital(Isosurface):
         self.current_scalarfield = np.real(np.fft.ifftn((factors*fields).sum(0), axes = (-3, -2, -1)))
         self.delete_obj(self.obj, delete_collection = False)
         self.generate_isosurface(transition_field = True)
-        
+
 
     def apply_field(self, wavefunction):
         transform = np.linalg.inv(self.transform) #Transform space relative to orbital
@@ -335,9 +329,9 @@ class AtomicOrbital(Isosurface):
         phi = np.arctan2(d[..., 1], d[..., 0]);
         theta = np.arctan2(np.linalg.norm(d[..., :2], axis = -1), d[..., 2])
         return wavefunction(dist, theta, phi)
-        
 
-    
+
+
 class MolecularOrbital(AtomicOrbital):
     def __init__(self, r, n, field_func, position = np.zeros(3), atom_positions = np.zeros((1, 3)), LC = None, *args, **kwargs):
         super().__init__(r, n, field_func=field_func, position = position, *args, **kwargs)
@@ -364,8 +358,4 @@ def apply_field(grid, orbital_func):
     dist = np.linalg.norm(grid, axis = -1)
     phi = np.arctan2(grid[..., 1], grid[..., 0]);
     theta = np.arctan2(np.linalg.norm(grid[..., :2], axis = -1), grid[..., 2])
-    return orbital_func(dist, theta, phi)    
-
-
-
-
+    return orbital_func(dist, theta, phi)

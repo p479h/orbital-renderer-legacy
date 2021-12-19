@@ -5,7 +5,7 @@ except:
 try:
     import bpy;
 except:
-    None;
+    print("Could not import bpy");
 from PointGroup import PointGroup
 import numpy as np;
 import os;
@@ -13,10 +13,11 @@ import json;
 import re;
 
 
-class Bobject: #Blender object 
+class Bobject: #Blender object
     def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob"):
+        print("Object is ", obj)
         self.obj = obj #Blender object that obj refers to
-        self.parent = None
+        self.parent = None;
         self.pause = pause; #These three are timers for the animations and can easily be integrated into the json file.
         self.transition = transition;#It would be concise to make this a class property. But I am not sure yet.
         self.short_pause = short_pause;
@@ -27,25 +28,31 @@ class Bobject: #Blender object
 
     def add_updater(self, func):
         """
-            takes frame as an argument
+            Every function in updaters gets run every frame and takes frame as argument.
             """
         self.updaters.append(func)
 
     @property
     def parent(self):
-        return self.obj.parent
+        if self.obj:
+            return self.obj.parent
+        return None
 
     @parent.setter
     def parent(self, parent):
-        self._parent = parent
+        if self.obj:
+            self.obj.parent = parent
 
-    def set_obj(self, obj):
+    @property
+    def obj(self):
+        if hasattr(self,"_obj"):
+            return self._obj
+        return None
+
+    @obj.setter
+    def obj(self, obj):
         """ Sets the object that Bobject wraps"""
-        self.obj = obj
-        self.parent = obj.parent #May be None
-
-    def get_obj(self):
-        return self.obj
+        self._obj = obj
 
     def get_angles(self, obj = None):
         if obj is None:
@@ -74,7 +81,7 @@ class Bobject: #Blender object
             return [rgb_r, rgb_g, rgb_b]
         elif _tuple == True:
             return (rgb_r, rgb_g, rgb_b, 1.0)
-        
+
     def to_euler(self, obj = None):
         self.set_active(obj if obj else self.obj)
         if not self.obj is None:
@@ -83,15 +90,15 @@ class Bobject: #Blender object
             obj.rotation_mode = "XYZ"
         else:
             print("NO VALID OBJECT TO_EULER")
-            
+
     def to_quaternion(self, obj = None):
         if not self.obj is None:
             self.obj.rotation_mode = "QUATERNION"
         elif not obj is None:
             obj.rotation_mode = "QUATERNION"
         else:
-            print("NO VALID OBJECT TO_EULER")            
-    
+            print("NO VALID OBJECT TO_EULER")
+
     def play(self, *objs):
         self.keyframe_state(*objs)
         self.frame_current += self.transition
@@ -112,7 +119,7 @@ class Bobject: #Blender object
             v = [v]*3
         obj.scale = mathutils.Vector(v)
         return obj
-        
+
     def set_location_obj(self, obj, v):
         if type(v) in (int, float):
             v = [v]*3
@@ -155,15 +162,15 @@ class Bobject: #Blender object
     def translate(self, v):
         self.translate_obj(self.obj, v)
         return self
-            
-        
+
+
     def translate_obj(self, obj, v):
         """
             Translates the molecule by v"""
         obj.location = obj.location + mathutils.Vector(v)
         return obj
 
-    
+
     def scale_obj(self, obj, v):
         """
             scales the molecule by v"""
@@ -171,8 +178,8 @@ class Bobject: #Blender object
             v = [v]*3
         obj.scale = obj.scale * mathutils.Vector(v)
         return obj
-        
-    
+
+
     def rotate_obj(self, obj, angle, axis = [0, 0, 1]):
         """
             rotates the molecule by angle about axis
@@ -195,7 +202,7 @@ class Bobject: #Blender object
 
     def add_modifier(self, modifier = "SUBSURF"):
         return self.add_modifier_obj(self.obj, modifier)
-    
+
     def smooth_obj(self, obj, modifier = False):
         self.deselect_all()
         self.set_active(obj)
@@ -229,7 +236,7 @@ class Bobject: #Blender object
     @staticmethod
     def select(*objs):
         [obj.select_set(True) for obj in objs];
-        
+
     def set_parent(self, parent, child):
         self.deselect_all();
         self.select(parent, child);
@@ -239,7 +246,7 @@ class Bobject: #Blender object
     @staticmethod
     def set_frame(frame):
         bpy.context.scene.frame_current = frame;
-        
+
     @staticmethod
     def get_current_frame():
         return bpy.context.scene.frame_current;
@@ -265,7 +272,7 @@ class Bobject: #Blender object
     def keyframe_state(self, *objs, property = "all", frame = None):
         property = property.lower()
         if objs[0].__class__ != bpy.types.Object: #In case we are dealing with wrapped objects
-            objs = [o.obj for o in objs] 
+            objs = [o.obj for o in objs]
         modes = ["rotation_euler" if "X" in o.rotation_mode else "rotation_quaternion" for o in objs]
         if property == "all":
             properties = [("location", "scale", modes[i]) for i, o in enumerate(objs)]
@@ -275,7 +282,7 @@ class Bobject: #Blender object
             properties = modes
         else:
             print("Problem in Bobject.keyframe_state due to unknown property")
-            
+
         if frame is None:
             frame = self.get_current_frame()
 
@@ -314,14 +321,14 @@ class Bobject: #Blender object
     def unlink_obj(obj, collections = None):
         if collections is None:
             collections = bpy.data.collections
-            
+
         for collection in collections:
             try:
                 collection.objects.unlink(obj);
             except:
                 None; #Sometimes an object is not part of a collection, which would throw an error.
 
-    @staticmethod                
+    @staticmethod
     def link_obj(obj, collection):
         collection.objects.link(obj);
 
@@ -349,7 +356,7 @@ class Bobject: #Blender object
         bpy.data.scenes["Scene"].render.image_settings.color_mode = color_mode;
         bpy.data.cameras[0].lens = focal_length;
         bpy.data.objects.get("Camera").matrix_world = mathutils.Matrix(camera_matrix);
-    
+
     @staticmethod
     def switch_render_engine(engine = "CYCLES"):
         """ CYCLES, BLENDER_EEVEE"""
@@ -416,8 +423,8 @@ class Bobject: #Blender object
                 for c in collections:
                     if len(c.objects) == 0:
                         bpy.data.collections.remove(c)
-            
-        
+
+
 
     @classmethod
     def apply_transform(cls, ob, location=False, rotation=False, scale=False):
@@ -425,7 +432,7 @@ class Bobject: #Blender object
         mb = ob.matrix_basis
         I = Matrix()
         loc, rot, scale = mb.decompose()
-        
+
         T = Matrix.Translation(loc)
         R = mb.to_3x3().normalized().to_4x4()
         S = Matrix.Diagonal(scale).to_4x4()
@@ -437,15 +444,15 @@ class Bobject: #Blender object
             transform[i], basis[i] = basis[i], transform[i]
         swaps = [location, rotation, scale]
         [swap(i) for i, b in enumerate(swaps) if b] #apply the swaps
-            
+
         M = transform[0] @ transform[1] @ transform[2]
         if hasattr(ob.data, "transform"):
             ob.data.transform(M)
         for c in ob.children:
             c.matrix_local = M @ c.matrix_local
-            
+
         ob.matrix_basis = basis[0] @ basis[1] @ basis[2]
-        
+
     def hide(self, obj, hide_render = False):
         obj.hide_set(True);
         obj.hide_render = hide_render;
@@ -470,7 +477,7 @@ class Bobject: #Blender object
                self.setup_dir(directs[ir])
                self.render_image(directs[ir], frame = frame)
 
-    
+
     def render_animation(self, frames = None, *args, **kwargs):
         """
         arguments are the same as render_image"""
@@ -481,7 +488,7 @@ class Bobject: #Blender object
                 [u(frame) for u in self.updaters]
             kwargs["frame"] = frame
             self.render_image(*args, **kwargs)
-        
+
 
     def render_image(self, directory = None, name = None, file_format = 'PNG', frame = 0):
         if not name:
