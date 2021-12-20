@@ -1,16 +1,6 @@
-import numpy as np
+from all_imports import *
+from Bobject import *
 import wavefunctions
-try:
-    import bpy
-    import mathutils
-except:
-    None
-from skimage.measure import marching_cubes
-from scipy.interpolate import interp1d
-from scipy.special import binom
-from Bobject import Bobject
-from numba import njit
-import time
 
 def fibonacci_sphere(samples=1000):
     phi = np.pi * (3. - np.sqrt(5.))  # golden angle in radians
@@ -27,16 +17,16 @@ class Isosurface(Bobject):
         if "name" not in kwargs:
             kwargs["name"] = "Orbital"
             self.name = kwargs["name"]
-        super().__init__(*args, **kwargs);
+        super().__init__(*args, **kwargs)
         self.collection = self.make_collection(name = self.name)
 
     @staticmethod
     def bezier(start, finish, n = 30) -> np.ndarray:
-        t = np.linspace(0, 1, n);
-        x = np.array([start, start, finish, finish])[..., np.newaxis];
+        t = np.linspace(0, 1, n)
+        x = np.array([start, start, finish, finish])[..., np.newaxis]
         i = np.arange(4).reshape(4, *[1 for i in range(x.ndim-1)])
-        P = np.sum(binom(3, i)*(1-t)**(3-i) * t**i * x, axis = 0);
-        return P; #Note that n plays the role of the frames
+        P = np.sum(binom(3, i)*(1-t)**(3-i) * t**i * x, axis = 0)
+        return P #Note that n plays the role of the frames
 
     @staticmethod
     def linear(start, finish, n = 30) -> np.ndarray:
@@ -45,9 +35,9 @@ class Isosurface(Bobject):
     @staticmethod
     def cart_to_spherical(xyz):
         "xyz is a vector with xyz coordinates in the last dimension"
-        phi = np.arctan2(xyz[..., 1], xyz[..., 0]);
-        theta = np.arctan2(np.linalg.norm(xyz[..., :2], axis=-1), xyz[..., 2]);
-        r = np.linalg.norm(xyz, axis = -1);
+        phi = np.arctan2(xyz[..., 1], xyz[..., 0])
+        theta = np.arctan2(np.linalg.norm(xyz[..., :2], axis=-1), xyz[..., 2])
+        r = np.linalg.norm(xyz, axis = -1)
         return r, phi, theta
 
 
@@ -58,13 +48,13 @@ class Isosurface(Bobject):
         if type(ratios) in (float, int):
             ratios = np.array([ratios])
         ratios = np.array(ratios).flatten()
-        xyz = cls.fib_sphere.reshape(-1, 3)*r; #All points in a sphere
+        xyz = cls.fib_sphere.reshape(-1, 3)*r #All points in a sphere
         if not (atoms is None):
-            d = xyz - np.array(atoms).reshape(-1, 1, 3);
+            d = xyz - np.array(atoms).reshape(-1, 1, 3)
         else:
             d = xyz[np.newaxis,...]
         r, phi, theta = cls.cart_to_spherical(d)
-        values = (field_func(r, theta, phi)*ratios[:, None]).sum(axis=0);
+        values = (field_func(r, theta, phi)*ratios[:, None]).sum(axis=0)
         return np.max(np.abs(values))
 
 
@@ -84,12 +74,12 @@ class Isosurface(Bobject):
         if molecule.ndim == 1:
             molecule = molecule.reshape(-1, 3)
         if len(SALC) == 0:
-            SALC = np.ones(len(molecule)).astype(np.float32);
+            SALC = np.ones(len(molecule)).astype(np.float32)
         orientation_matrices = np.array([np.linalg.inv(i) for i in map(orbital_orientation_function, molecule)])
         grid_transformed = np.einsum("aef,abcdfe->abcde", orientation_matrices, (grid-molecule.reshape(-1, 1, 1, 1, 3))[..., np.newaxis])+molecule.reshape(-1, 1, 1, 1, 3)
-        d = grid_transformed - (molecule_mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32);
+        d = grid_transformed - (molecule_mat@molecule.T).T.reshape(-1, 1, 1, 1, 3).astype(np.float32)
         dist = np.linalg.norm(d, axis = 4)
-        phi = np.arctan2(d[..., 1], d[..., 0]);
+        phi = np.arctan2(d[..., 1], d[..., 0])
         theta = np.arctan2(np.linalg.norm(d[..., :2], axis = 4), d[..., 2])
         return orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
 
@@ -101,7 +91,7 @@ class Isosurface(Bobject):
         """
         grids = np.meshgrid(*[np.linspace(-r, r, n) for i in range(3)], indexing = "ij")
         grids = [i[..., None] for i in grids]
-        return np.concatenate(grids, axis = 3).astype(np.float32);
+        return np.concatenate(grids, axis = 3).astype(np.float32)
 
     def make_orbital_material(self, sign, copy = True, ivo = False):
         A = {"p":"positive", "n": "negative"}[sign]
@@ -110,8 +100,8 @@ class Isosurface(Bobject):
         except:
             None
         if not bpy.data.materials.get(A) or not copy:
-            m = bpy.data.materials.new(name=A);
-            m.use_nodes = True;
+            m = bpy.data.materials.new(name=A)
+            m.use_nodes = True
             if A == "positive":
                 rgb = (.16, .47, .8, 1)
                 if ivo:
@@ -121,34 +111,34 @@ class Isosurface(Bobject):
                 if ivo:
                     (0.1, 0.419, 0.07, 1)
 
-            m.node_tree.nodes["Principled BSDF"].inputs[0].default_value = rgb;
+            m.node_tree.nodes["Principled BSDF"].inputs[0].default_value = rgb
             if bpy.data.scenes["Scene"].render.engine == "BLENDER_EEVEE":
-                m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = .3;
-            m.node_tree.nodes["Principled BSDF"].inputs[7].default_value = .1;
-            m.node_tree.nodes["Principled BSDF"].inputs[14].default_value = 1;
-            m.node_tree.nodes["Principled BSDF"].inputs[15].default_value = .5;
-            m.node_tree.nodes["Principled BSDF"].inputs[16].default_value = .5;
+                m.node_tree.nodes["Principled BSDF"].inputs[5].default_value = .3
+            m.node_tree.nodes["Principled BSDF"].inputs[7].default_value = .1
+            m.node_tree.nodes["Principled BSDF"].inputs[14].default_value = 1
+            m.node_tree.nodes["Principled BSDF"].inputs[15].default_value = .5
+            m.node_tree.nodes["Principled BSDF"].inputs[16].default_value = .5
             m.use_screen_refraction= True
             m.blend_method = "BLEND"
             m.show_transparent_back = False
         else:
-            m = bpy.data.materials.get(A);
-        return m;
+            m = bpy.data.materials.get(A)
+        return m
 
     def make_mesh(self, verts, faces, sign = "p", offset = [0, 0, 0], scale = 1): #p is "positive"
         """
             makes a mesh from verts and faces"""
         self.deselect_all()
-        new_mesh = bpy.data.meshes.new(self.name);
-        new_mesh.from_pydata((verts*scale+offset).tolist(), [], faces.tolist());
+        new_mesh = bpy.data.meshes.new(self.name)
+        new_mesh.from_pydata((verts*scale+offset).tolist(), [], faces.tolist())
         new_mesh.update()
         new_object = bpy.data.objects.new('Orbital', new_mesh)
         self.link_obj(new_object, self.collection)
         self.obj = new_object
         self.set_active(new_object)
         self.smooth()
-        self.set_origin(new_object);
-        return new_object;
+        self.set_origin(new_object)
+        return new_object
 
     def generate_isosurface(self, material_copy = True, center_origin = True, transition_field = False):
         """
@@ -160,29 +150,29 @@ class Isosurface(Bobject):
         """
         self.deselect_all()
         pair = []
-        r = self.r;
-        n = self.n;
+        r = self.r
+        n = self.n
         grid = self.grid
         isovalue = self.isovalue if transition_field is False else self.current_isovalue
         scalarfield = self.scalarfield if transition_field is False else self.current_scalarfield
-        spacing = np.full(3, r*2/(n-1));
+        spacing = np.full(3, r*2/(n-1))
         for sign, val in zip(["p", "n"],[1, -1]):
-            isovalue*=val;
+            isovalue*=val
             try:
-                vertices, faces, normals, values = marching_cubes(scalarfield, level = isovalue, spacing = spacing)
+                vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
             except Exception as f: #If the isovalue is too high/low to begin with:
                 print(f, "Could not render orbital. Consider changing isovalue.")
-                vertices = np.array([[0, 0, 0]]);
-                normals = np.array([]);
-                faces = np.array([]);
-                values = np.array([]);
+                vertices = np.array([[0, 0, 0]])
+                normals = np.array([])
+                faces = np.array([])
+                values = np.array([])
             orb = self.make_mesh(vertices - r, faces, sign)
-            orb.active_material = self.make_orbital_material(sign, copy = material_copy);
+            orb.active_material = self.make_orbital_material(sign, copy = material_copy)
             pair.append(orb)
         self.select(*pair)
         self.set_active(orb)
-        bpy.ops.object.join();
-        self.set_origin(orb);
+        bpy.ops.object.join()
+        self.set_origin(orb)
         self.obj = orb
         self.mesh = orb
         return orb
@@ -259,7 +249,7 @@ class AtomicOrbital(Isosurface):
             f1, i1, sf1, ff1 = self.get_current_frame(), \
                             last_transition["isovalues"][-1], \
                             last_transition["scalarfields"][-1], \
-                            last_transition["wavefunctions"][-1];
+                            last_transition["wavefunctions"][-1]
         else:
             f1, i1, sf1, ff1 = self.get_current_frame(), \
                              self.isovalue, \
@@ -326,7 +316,7 @@ class AtomicOrbital(Isosurface):
         transform = np.linalg.inv(self.transform) #Transform space relative to orbital
         d = np.einsum("de,abce->abcd",transform,self.grid) - self.position
         dist = np.linalg.norm(d, axis = -1)
-        phi = np.arctan2(d[..., 1], d[..., 0]);
+        phi = np.arctan2(d[..., 1], d[..., 0])
         theta = np.arctan2(np.linalg.norm(d[..., :2], axis = -1), d[..., 2])
         return wavefunction(dist, theta, phi)
 
@@ -356,6 +346,6 @@ class MolecularOrbital(AtomicOrbital):
 
 def apply_field(grid, orbital_func):
     dist = np.linalg.norm(grid, axis = -1)
-    phi = np.arctan2(grid[..., 1], grid[..., 0]);
+    phi = np.arctan2(grid[..., 1], grid[..., 0])
     theta = np.arctan2(np.linalg.norm(grid[..., :2], axis = -1), grid[..., 2])
     return orbital_func(dist, theta, phi)

@@ -1,5 +1,4 @@
-import os
-import json
+from all_imports import *
 
 class FileManager:
 
@@ -9,10 +8,10 @@ class FileManager:
             Reads and returns data from json files used for animation of symmetry operations
             """
         with open(filepath, "r") as f:
-            data = json.load(f);
+            data = json.load(f)
         if type(data["xyz"]) == list: #Make sure that the path is compatible with different os's
-            data["xyz"] = os.path.join(*data["xyz"]);
-        return data;
+            data["xyz"] = os.path.join(*data["xyz"])
+        return data
 
     @staticmethod
     def dump_molecule_data(data, filepath):
@@ -23,7 +22,7 @@ class FileManager:
             xyzpath = os.path.normpath(data["xyz"])
             data["xyz"] = xyzpath.split(os.sep) #Now we have a list that can be reassembled in accordance with the operating system's path separator
         with open(filepath, "w") as f:
-            json.dump(data, f, ensure_ascii = False);
+            json.dump(data, f, ensure_ascii = False)
 
 
     @classmethod
@@ -41,7 +40,7 @@ class FileManager:
                     positions.append([float(i) for i in l[:3]])
                 elif found_bonds:
                     bonds.append([int(l[:3])-1, int(l[3:6])-1])
-        return atoms, positions, bonds;
+        return atoms, positions, bonds
 
     @classmethod
     def read_mol(cls, path):
@@ -69,13 +68,13 @@ class FileManager:
 
     @classmethod
     def read_xyz(cls, path):
-        positions = [];
-        names = []; #The atomic labels
+        positions = []
+        names = [] #The atomic labels
         with open(path, "r") as file:
-            lines = file.read().replace("\\t", " ").split("\n");
+            lines = file.read().replace("\\t", " ").split("\n")
             for i, l in enumerate(lines):
-                pieces = l.split();
+                pieces = l.split()
                 if len(pieces) == 4:
-                    positions.append([float(coord) for coord in pieces[1:]]);
-                    names.append(pieces[0]);
+                    positions.append([float(coord) for coord in pieces[1:]])
+                    names.append(pieces[0])
         return names, positions
