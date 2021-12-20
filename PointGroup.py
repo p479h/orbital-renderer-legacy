@@ -340,9 +340,10 @@ class SObject:
         itterations = list(map(lambda a: degeneracy[a], letters))
         n = max(itterations)
         dicts = []
+        w = self.world_matrices.copy()
         for i in range(n):
             dicts.append(self.find_projection(index))
-            self.world_matrices = np.einsum("bc,acd->abd",self.expanded_so_matrices[i+1], self.world_matrices)
+            self.world_matrices = np.einsum("bc,acd->abd",self.expanded_so_matrices[i+1], w)
         return dicts
 
     def filter_SALCS(self, dicts):
