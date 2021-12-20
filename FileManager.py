@@ -26,6 +26,11 @@ class FileManager:
 
 
     @classmethod
+    def from_file(cls, path):
+        ending =  os.path.splitext(path)[-1].strip(".")
+        return getattr(cls, f"read_{ending}")(path)
+
+    @classmethod
     def read_smol(cls, path):
         atoms = []
         positions = []

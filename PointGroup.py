@@ -1,21 +1,44 @@
 from all_imports import *
+from FileManager import FileManager as fm
+
+def get_rotation_around(angle, shape, axis):
+    axis = np.array(axis)/np.linalg.norm(np.array(axis))
+    l, m, n = axis
+    diag = np.eye(3)*np.cos(angle)
+    rest = (np.ones((3, 3))-np.eye(3))*np.sin(angle)
+    angular_part = diag+rest
+    ll = np.array(axis)*np.array(axis)[:, None]*(1-np.cos(angle))
+    rr = np.array([[1, -n, m], [n, 1, -l], [-m, l, 1]])*angular_part
+    if shape == 4:
+        matrix = np.eye(4)
+        matrix[:3, :3] = ll+rr
+        return matrix
+    return ll + rr
+
+def get_reflection_across(_, shape, axis):
+    axis = np.array(axis)
+    axis = axis/np.linalg.norm(axis)
+    N = axis[None, :]
+    A = (np.eye(3)-2*N*N.T)
+    if shape == 4:
+        I = np.eye(4)
+        I[:3, :3] = A
+        return I
+    return A
 
 class PointGroup:
-    def __init__(self, file, characters = None, irrep_labels = None):
+    def __init__(self, file):
         file = os.path.join(os.getcwd(), "pointgroup_data", file)
         if not os.path.splitext(file)[-1] == ".txt":
             file = file + ".txt"
-        self.text = open(file, "r").read()
+        with open(file, "r") as f:
+            self.text = open(file, "r").read()
         self.pg_name = self.read_pg_name(file)
-        self.conjugacy_classes = self.read_conjugacy_classes(file)
-        self.normals = [[[1, 1, 1]] for i in range(len(self.conjugacy_classes))] #Normals defining each symetry operation
-        self.naxis = [[] for i in range(len(self.normals))] #n defining the n'th rotation_axis
-        self.conjugacy_counts = self.count_conjugacy(self.conjugacy_classes)
-        self.h = self.conjugacy_counts.sum()
-        self.irreps = irrep_labels if type(irrep_labels) != type(None) else self.read_irreps(file)
-        self.characters = characters if type(characters) != type(None) else self.read_characters(file)
-        self.matrices = [[] for i in range(len(self.conjugacy_classes))] #This will contain the matrices which carry out the symmetry operations in the molecule
-                            #There is a list of matrices for each conjugacy class
+        self.conjugacy_classes = self.read_conjugacy_classes(file) #Symmetry operations with labels
+        self.conjugacy_counts = self.count_conjugacy(self.conjugacy_classes) #Number of elements for each operation
+        self.h = self.conjugacy_counts.sum() #This should be equal to the length of the vectors in the table!
+        self.irreps = self.read_irreps(file) #Irrep labels
+        self.characters = self.read_characters(file)
 
     @classmethod
     def normal_to_directory(self, term):
@@ -37,14 +60,11 @@ class PointGroup:
         with open(file, "r") as f:
             return f.readline().split()[0]
 
-    def set_matrices(self, matrices):
-        for i, m_group in enumerate(matrices):
-            self.matrices[i] = m_group
-
-    def find_angles(self):
+    @classmethod
+    def find_angles(cls, conjugacy_classes): #Find angles of rotation for the conjugacy_classes
         n = []
         pattern = r"[C|S]\'*([0-9]+)\)?([0-9]+)?"
-        for cc in self.conjugacy_classes:
+        for cc in conjugacy_classes:
             results = re.search(pattern, cc)
             if results:
                 n_ = int(results.group(1))
@@ -70,6 +90,11 @@ class PointGroup:
             elif cc.count("sig")>0:
                 func, args = self.make_reflection, (np.array(normals[ci]),)
             self.matrices.append(func(*args))
+        return self.matrices
+
+    def get_so_matrices(self, normals):
+        return self.make_matrices_from_normals(normals, self.find_angles(self.conjugacy_classes))
+
 
     def expand(self): #Was used for some early animations. I think it is a good idea to keep it
         s = []
@@ -87,7 +112,7 @@ class PointGroup:
 
     def find_landnig_spots(self, orbitals, matrices, orbital_index = 0):
         final_orbitals = np.einsum("abc,acd->abd", matrices.reshape(-1, 4, 4), orbitals[[orbital_index], ...])
-        final_orientations = np.einsum("abc,abc->ac", orbitals[[orbital_index], :3, :3], final_orbitals[:3, :3])
+
         ## To be continued
 
     def find_projected_p_coeffs(self, orbital, matrix):
@@ -191,15 +216,15 @@ class PointGroup:
 
     def make_rotation(self, normal, angle): #This and the following "tranformation functions" generate 4x4 matrices that can be appplied to the orbitals
         if len(normal.shape) == 1:
-            return np.array(mathutils.Matrix.Rotation(angle, 4, normal))
+            return get_rotation_around(angle, 4, normal)
         else:
-            return np.array([mathutils.Matrix.Rotation(angle, 4, norm) for norm in normal])
+            return np.array([get_rotation_around(angle, 4, norm) for norm in normal])
 
     def make_reflection(self, normal, angle = 0):
         if len(normal.shape) == 1:
-            return np.array(mathutils.Matrix.Scale(-1, 4, normal))
+            return np.array(get_reflection_across(-1, 4, normal))
         else:
-            return np.array([np.array(mathutils.Matrix.Scale(-1, 4, norm)) for norm in normal])
+            return np.array([get_reflection_across(-1, 4, norm) for norm in normal])
 
     def make_inversion(self, normal = [], angle = 0):
         i = np.eye(4)*-1
@@ -520,11 +545,34 @@ class PointGroup:
             print(line.replace("\t", " & ") + "\\\\" + ( "\\hline" if i < len(lines)-1 or frame else ""))
         print("\\end{tabular}\n\\end{center}")
 
+class SObject:
+    #Symmetry object
+    def __init__(self, positions = [], world_matrices = None, pg = None, normals = None):
+        self.positions = np.array(positions).reshape(-1, 3)
+        if world_matrices is None: #4x4 world matrices to hold position and orientation
+            m = np.tile(np.eye(4), (len(self.positions), 1, 1))
+            m[:, :3, -1] = self.positions
+            self.world_matrices = m
+        else:
+            self.world_matrices = np.array(world_matrices)
+        if not pg is None:
+            self.pg = PointGroup(pg)
+            self.so_matrices = self.pg.get_so_matrices(normals) #Normals is relative to symmetry operations. MUST be provided
+
+    @classmethod
+    def from_datafile(cls, filepath):
+        data = fm.load_molecule_data(filepath)
+        atoms, positions = fm.from_file(data["xyz"])[:2]
+        return cls(positions, world_matrices = None, pg = data["point_group"], normals = data["normals"])
+
+
+
+
 if __name__ == "__main__":
-    import os
-    t = ""
+    file = os.path.join("molecule_data", "data_benzene.json")
     pg = PointGroup("D6h")
-    a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
-    a = np.array([f"${e}$" for e in a]).reshape(-1, 13)
-    print(a.tolist())
-    pg.latex_table()
+    benzene = SObject.from_datafile(file)
+    # a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
+    # a = np.array([f"${e}$" for e in a]).reshape(-1, 13)
+    # print(a.tolist())
+    # pg.latex_table()
