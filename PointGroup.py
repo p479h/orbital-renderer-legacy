@@ -303,7 +303,7 @@ class SObject:
 
 
     @classmethod
-    def from_datafile(cls, filepath: str):
+    def from_file(cls, filepath: str):
         data = fm.load_molecule_data(filepath)
         atoms, positions = fm.from_file(data["xyz"])[:2]
         return cls(positions, world_matrices = None, pg = data["point_group"], normals = data["normals"])
@@ -371,7 +371,7 @@ class SObject:
 if __name__ == "__main__":
     file = os.path.join("molecule_data", "data_benzene.json")
     pg = PointGroup("D6h")
-    benzene = SObject.from_datafile(file)
+    benzene = SObject.from_file(file)
     SALC = benzene.get_SALCS(0)
     # a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
     # a = np.array([f"${e}$" for e in a]).reshape(-1, 13)

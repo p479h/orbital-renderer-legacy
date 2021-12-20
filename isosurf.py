@@ -18,7 +18,7 @@ class Isosurface(Bobject):
             kwargs["name"] = "Orbital"
             self.name = kwargs["name"]
         super().__init__(*args, **kwargs)
-        self.collection = self.make_collection(name = self.name)
+        self.collection = self.make_collection(parent = self.parent_collection, name = self.name)
 
     @staticmethod
     def bezier(start, finish, n = 30) -> np.ndarray:
@@ -201,6 +201,8 @@ class AtomicOrbital(Isosurface):
 
     @property
     def field_func(self):
+        print(self.coeff)
+        print(self._field_func)
         return lambda *args, **kwargs: self.coeff*self._field_func(*args, **kwargs)
 
     @field_func.setter
@@ -342,7 +344,7 @@ class MolecularOrbital(AtomicOrbital):
             ]
         self.scalarfield = np.array([
             a.scalarfield for a in self.atomic_orbitals]).sum(0)
-        self.isovalue = self.iso_find2(r, atom_positions, field_func, ratios = LC)
+        self.isovalue = self.iso_find2(r, field_func, ratios = LC, atoms = atom_positions)
 
 def apply_field(grid, orbital_func):
     dist = np.linalg.norm(grid, axis = -1)

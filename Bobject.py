@@ -1,7 +1,7 @@
 from all_imports import *
 
 class Bobject: #Blender object
-    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob"):
+    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob", parent_collection = None):
         print("Object is ", obj)
         self.obj = obj #Blender object that obj refers to
         self.parent = None #
@@ -11,6 +11,7 @@ class Bobject: #Blender object
         self.name = name
         self.updaters = []
         self.transitions = []
+        self.parent_collection = parent_collection
 
     def add_updater(self, func):
         """
@@ -413,6 +414,9 @@ class Bobject: #Blender object
                 for c in collections:
                     if len(c.objects) == 0:
                         bpy.data.collections.remove(c)
+
+    def erase(self):
+        self.delete_obj(self.obj, delete_collection = True)
 
 
 

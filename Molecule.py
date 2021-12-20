@@ -1,7 +1,9 @@
 from all_imports import *
-from isosurf import Isosurface
+from isosurf import Isosurface, AtomicOrbital, MolecularOrbital
 from Bobject import *
 from FileManager import FileManager as fm
+from PointGroup import *
+import wavefunctions
 
 
 def load_atoms_data():
@@ -514,7 +516,7 @@ class Molecule(Atom):
         self.set_origin(orb)
         return orb
 
-    def make_orbital(self, scalarfield, grid, isovalue, material_copy = True, center_origin = True, MO = True, join = True):
+    def make_molecular_orbital(self, r, n, SALC = 1, field_func=wavefunctions.pz, material_copy = True, center_origin = True, **kwargs):
         """
         Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
         scalarfield: values of wavefunction in the corresponding places in the grid
@@ -523,37 +525,23 @@ class Molecule(Atom):
         material_copy: boolean specifying if every orbital will have it's own instance of the material
         join: boolean specifying if both positive and negative lobes are joined
         """
-        if MO:
-            scalarfields = scalarfield.sum(0, keepdims = True)
-        else:
-            scalarfields = scalarfield.copy()
-        orbs = []
-        self.deselect_all()
-        for scalarfield in scalarfields:
-            orb = self.generate_isosurface(scalarfield, grid, isovalue, material_copy, center_origin)
-            orbs.append(orb)
-        self.select(*orbs)
-        self.set_active(orb)
-        if join:
-            bpy.ops.object.join()
+        orbs = MolecularOrbital(r, n, field_func, position = np.zeros(3), atom_positions = self.position, LC = SALC)
+        orbs.generate_isosurface(**kwargs)
         if center_origin:
-            self.set_origin(orb)
-        if join:
-            return orb
+            self.set_origin(orbs.obj)
+        self.meshes.append(orbs.obj)
         return orbs
 
-    def make_atomic_orbital(self, position, isovalue, orbital_func, r, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, **kwargs):
+    def make_atomic_orbital(self, position, orbital_func, r, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, **kwargs):
         """
             Makes an atomic orbital at specified position
             if atom_index is provided, data is incorporated into the object and it can be animated.
             """
-        grid = Isosurface.generate_grid(r, n)
-        scalarfield = Isosurface.apply_field(grid,
-            np.zeros((1, 3)),
-            orbital_func,
-            SALC = [1],
-            orbital_orientation_function = orbital_orientation_function)
-        orb = self.make_orbital(scalarfield, grid, isovalue, **kwargs)
+        orb = AtomicOrbital(
+            r = r, n = n, isovalue = None,
+            position = [0, 0, 0], coeff = 1,
+            field_func = orbital_func, parent_collection = self.orbital_collection)
+        orb = orb.generate_isosurface(material_copy = False)
         orb.location = position
         if type(atom_index) == int:
             self.set_parent(self.atom_meshes[atom_index], orb)
@@ -562,7 +550,7 @@ class Molecule(Atom):
             self.orbital_names[atom_index] = "Not None"
         return orb
 
-    def make_atomic_orbitals(self, isovalue, orbital_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
+    def make_atomic_orbitals(self, orbital_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
         """
             Adds an atomic orbital to the mesh for each orbital where coeff in coeffs != 0
             """
@@ -571,7 +559,7 @@ class Molecule(Atom):
         orbs = []
         for i, p in enumerate(self.position):
             if coeffs[i] == 0: continue
-            orb = self.make_atomic_orbital(p, isovalue, orbital_func, r, n, atom_index = i, MO = False, **kwargs)
+            orb = self.make_atomic_orbital(p, orbital_func, r, n, atom_index = i, MO = False, **kwargs)
             orb.scale = [scale*coeffs[i]/abs(coeffs[i])]*3
             self.set_active(orb)
             bpy.ops.object.transform_apply(location = False, rotation = False, scale = True)
