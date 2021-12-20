@@ -27,7 +27,7 @@ def get_reflection_across(_, shape, axis):
     return A
 
 class PointGroup:
-    def __init__(self, file):
+    def __init__(self, file: str):
         file = os.path.join(os.getcwd(), "pointgroup_data", file)
         if not os.path.splitext(file)[-1] == ".txt":
             file = file + ".txt"
@@ -41,27 +41,27 @@ class PointGroup:
         self.characters = self.read_characters(file)
 
     @classmethod
-    def normal_to_directory(self, term):
+    def normal_to_directory(self, term: str) -> str:
         """
             Takes term and writes it in the same way as in the directory"""
         return term.replace("'", "_prime")
 
     @classmethod
-    def directory_to_normal(self, term):
+    def directory_to_normal(self, term: str) -> str:
         """
             Takes a directory name and writes it as it will be read from the point group files"""
         return term.replace("_prime","'")
 
-    def read_conjugacy_classes(self, file):
+    def read_conjugacy_classes(self, file: str) -> list:
         with open(file, "r") as f:
             return f.readline().split()[1:]
 
-    def read_pg_name(self, file):
+    def read_pg_name(self, file: str) -> list:
         with open(file, "r") as f:
             return f.readline().split()[0]
 
     @classmethod
-    def find_angles(cls, conjugacy_classes): #Find angles of rotation for the conjugacy_classes
+    def find_angles(cls, conjugacy_classes: list) -> np.ndarray: #Find angles of rotation for the conjugacy_classes
         n = []
         pattern = r"[C|S]\'*([0-9]+)\)?([0-9]+)?"
         for cc in conjugacy_classes:
@@ -76,7 +76,7 @@ class PointGroup:
         angles = np.pi*2/np.array(n)
         return angles
 
-    def make_matrices_from_normals(self, normals, angles):
+    def make_matrices_from_normals(self, normals: list, angles: np.ndarray) -> list:
         self.matrices = []
         for ci, cc in enumerate(self.conjugacy_classes):
             if "E" == cc:
@@ -92,7 +92,7 @@ class PointGroup:
             self.matrices.append(func(*args))
         return self.matrices
 
-    def get_so_matrices(self, normals):
+    def get_so_matrices(self, normals: list) -> list:
         return self.make_matrices_from_normals(normals, self.find_angles(self.conjugacy_classes))
 
 
@@ -103,27 +103,27 @@ class PointGroup:
             s = s + [pattern.sub("\2\3",cls)]*count
         return s
 
-    def make_rotation(self, normal, angle): #This and the following "tranformation functions" generate 4x4 matrices that can be appplied to the orbitals
+    def make_rotation(self, normal: np.ndarray, angle: float) -> np.ndarray: #This and the following "tranformation functions" generate 4x4 matrices that can be appplied to the orbitals
         if len(normal.shape) == 1:
             return get_rotation_around(angle, 4, normal)
         else:
             return np.array([get_rotation_around(angle, 4, norm) for norm in normal])
 
-    def make_reflection(self, normal, angle = 0):
+    def make_reflection(self, normal: np.ndarray, angle: float = 0) -> np.ndarray:
         if len(normal.shape) == 1:
             return np.array(get_reflection_across(-1, 4, normal))
         else:
             return np.array([get_reflection_across(-1, 4, norm) for norm in normal])
 
-    def make_inversion(self, normal = [], angle = 0):
+    def make_inversion(self, normal: list = [], angle: float = 0) -> np.ndarray:
         i = np.eye(4)*-1
         i[3, 3] = 1
         return i
 
-    def make_identity(self, normal = [], angle = 0):
+    def make_identity(self, normal: list = [], angle: float = 0) -> np.ndarray:
         return np.eye(4)
 
-    def make_improper_rotation(self, normal, angle):
+    def make_improper_rotation(self, normal: np.ndarray, angle: float)->np.ndarray:
         if len(normal.shape) == 1:
             return np.array(self.make_reflection(normal)@self.make_rotation(normal, angle))
         else:
@@ -131,20 +131,20 @@ class PointGroup:
             reflections = self.make_reflection(normal)
             return np.array([r@rot for r, rot in zip(reflections, rotations)])
 
-    def get_irreps(self, trace):
+    def get_irreps(self, trace: np.ndarray) -> list:
         counts = (trace*self.characters).sum(axis = 1)/self.h
         return [str(int(round(c, 0)))+n for c, n in zip(counts, self.irreps) if c > 0 ]
 
 
-    def count_mos(self, trace):
+    def count_mos(self, trace: np.ndarray) -> float:
         return ((trace*self.characters).sum(axis=1)/self.h * self.characters[:, 0]).sum()
 
-    def read_irreps(self, file):
+    def read_irreps(self, file: str) -> list:
         with open(file, "r") as f:
             f.readline()
             return [line.split()[0] for line in f.readlines()]
 
-    def read_characters(self, file):
+    def read_characters(self, file: str) -> np.ndarray:
         with open(file, "r") as f:
             f.readline()
             c = []
@@ -158,7 +158,7 @@ class PointGroup:
                     print("problem with ", l, "while collecting characters")
             return np.array(c)
 
-    def count_conjugacy(self, classes):
+    def count_conjugacy(self, classes: list) -> np.ndarray:
         counts = []
         pattern = re.compile("([0-9]+)\(?([A-Z]|sig|Sig|sigma|Sigma)")
         for cl in classes:
@@ -167,21 +167,21 @@ class PointGroup:
         return np.array(counts)
 
 
-    def find_irreps(self, reducible_representation):
+    def find_irreps(self, reducible_representation: np.ndarray) -> float:
         return (self.characters*reducible_representation.ravel()).sum(axis=1)/self.h
 
 
-    def set_normals(self, normals): #All normals!!! For all conjugacy classes
+    def set_normals(self, normals: list) -> None: #All normals!!! For all conjugacy classes
         for i, n_group in enumerate(normals):
             self.normals[i] = n_group
 
     def set_naxis(self, n, conj_cls = 0):
         self.naxis[conj_cls] = n
 
-    def get_header(self):
+    def get_header(self) -> str:
         return " | ".join([self.pg_name]+self.conjugacy_classes)
 
-    def permute_atoms(self, orbitals, matrix): # Used for finding the linearly independent SALCS
+    def permute_atoms(self, orbitals: np.ndarray, matrix: np.ndarray) -> np.ndarray: # Used for finding the linearly independent SALCS
         transformed_positions = (matrix[:3, :3]@orbitals[:, :3, 3].T).T
         new_indices = []
         indices = np.arange(len(transformed_positions))
@@ -220,7 +220,7 @@ class PointGroup:
         labels = [label + l for l in "12 13 14 23".split()]
         return (labels, u)
 
-    def latexify_term(self, t):
+    def latexify_term(self, t: str) -> str:
         t = t.replace("sigma", "sig").replace("Sigma", "sig").replace("infty", "inf").replace("Infty", "inf")
         #Takes a term t and makes it latex friendly (Could be improved I think)
         pattern = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
@@ -230,7 +230,7 @@ class PointGroup:
             subbed = pattern.sub(r"\1\2\3^{\4}_{\5}\6^{\7}", t)
         return subbed.replace("^{}", "").replace("_{}", "").replace("sig", r"\sigma ").replace("inf", r"\infty").replace("'", r"\prime ")
 
-    def latexify_terms(self, terms):
+    def latexify_terms(self, terms: list) -> list:
         return [self.latexify_term(t) for t in terms]
 
 
@@ -250,7 +250,7 @@ class PointGroup:
         else:
             return Y.T
 
-    def latex_table(self, text = None, frame = False):
+    def latex_table(self, text = None, frame = False)->None:
         pattern = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
         pattern = re.compile(pattern)
         subbed = pattern.sub(r"$\1\2\3_{\5}\6^{\4\7}$", self.text if not text else text).replace("sig", r"\sigma").replace("inf", r"\infty").replace("_{}", "").replace("^{}", "")
@@ -265,7 +265,7 @@ class PointGroup:
         print("\\end{tabular}\n\\end{center}")
 
 
-    def get_expanded_conjugacy_classes(self):
+    def get_expanded_conjugacy_classes(self)->list:
         """ Brings all transformations individually e.g. E C C C instead of E 3C"""
         new_columns = []
         for i, cc in enumerate(self.conjugacy_counts):
@@ -274,9 +274,9 @@ class PointGroup:
                 new_columns.append(kind)
         return new_columns
 
-    def get_expanded_characters(self):
+    def get_expanded_characters(self)->np.ndarray:
         new_columns = np.zeros((self.characters.shape[0], self.conjugacy_counts.sum()))
-        j = 0
+        j = 0 #At any point in time, j is cumsum(cc[:i]), but thats too wordy... :D
         for i, cc in enumerate(self.conjugacy_counts):
             col = np.tile(self.characters[:, [i]], (1, cc))
             new_columns[:, np.arange(j, j+cc)] = col
@@ -303,12 +303,12 @@ class SObject:
 
 
     @classmethod
-    def from_datafile(cls, filepath):
+    def from_datafile(cls, filepath: str):
         data = fm.load_molecule_data(filepath)
         atoms, positions = fm.from_file(data["xyz"])[:2]
         return cls(positions, world_matrices = None, pg = data["point_group"], normals = data["normals"])
 
-    def find_landing_spot_projection(self, index):
+    def find_landing_spot_projection(self, index: int) -> np.ndarray:
         p = self.transformed_world_matrices[..., :3, [-1]][:, [index], ...] #Final positions #(so, atom, 3, 1)
         d = self.world_matrices[..., :3, [-1]] - p #Displacement
         r = np.linalg.norm(d, axis = -2, keepdims = True) #Distance
@@ -318,7 +318,7 @@ class SObject:
         proj = np.einsum("abcd,abe->abcde",landing,o).squeeze() #(so, atom, [s,px,py,pz])
         return proj
 
-    def find_projection(self, index = 0):
+    def find_projection(self, index: int = 0) -> dict:
         proj = self.find_landing_spot_projection(index) #(so, atom, orbitals)
         SALCS = np.einsum("ba,acd->bcd",self.get_expanded_characters, proj) #(Irrep, atom, orbital)
         SALCS = np.round(SALCS, 3)
@@ -335,7 +335,7 @@ class SObject:
 
 
 if __name__ == "__main__":
-    file = os.path.join("molecule_data", "data_fullerene.json")
+    file = os.path.join("molecule_data", "data_cyclooctatetraene_dianion.json")
     pg = PointGroup("D6h")
     benzene = SObject.from_datafile(file)
     p = benzene.find_projection(0)
