@@ -545,6 +545,25 @@ class PointGroup:
             print(line.replace("\t", " & ") + "\\\\" + ( "\\hline" if i < len(lines)-1 or frame else ""))
         print("\\end{tabular}\n\\end{center}")
 
+
+    def get_expanded_conjugacy_classes(self):
+        """ Brings all transformations individually e.g. E C C C instead of E 3C"""
+        new_columns = []
+        for i, cc in enumerate(self.conjugacy_counts):
+            kind = re.search(r"([ECSi]['0-9']*)|sig[vdh]*", self.conjugacy_classes[i]).group(0)
+            for j in range(cc):
+                new_columns.append(kind)
+        return new_columns
+
+    def get_expanded_characters(self):
+        new_columns = np.zeros((self.characters.shape[0], self.conjugacy_counts.sum()))
+        j = 0
+        for i, cc in enumerate(self.conjugacy_counts):
+            col = np.tile(self.characters[:, [i]], (1, cc))
+            new_columns[:, np.arange(j, j+cc)] = col
+            j+=cc
+        return np.array(new_columns)
+
 class SObject:
     #Symmetry object
     def __init__(self, positions = [], world_matrices = None, pg = None, normals = None):
@@ -558,6 +577,11 @@ class SObject:
         if not pg is None:
             self.pg = PointGroup(pg)
             self.so_matrices = self.pg.get_so_matrices(normals) #Normals is relative to symmetry operations. MUST be provided
+            self.expanded_so_matrices = np.concatenate(self.so_matrices, axis = 0) #Transformation matrices associated with each conjugacy class
+            self.expanded_conjugacy_classes = self.pg.get_expanded_conjugacy_classes() # Each
+            self.get_expanded_characters = self.pg.get_expanded_characters()                                             #(irrep,  so)
+            self.transformed_world_matrices = np.einsum("acd,bde->abce", self.expanded_so_matrices, self.world_matrices) #(so, atom, 4, 4)
+
 
     @classmethod
     def from_datafile(cls, filepath):
@@ -565,13 +589,39 @@ class SObject:
         atoms, positions = fm.from_file(data["xyz"])[:2]
         return cls(positions, world_matrices = None, pg = data["point_group"], normals = data["normals"])
 
+    def find_landing_spot_projection(self, index):
+        p = self.transformed_world_matrices[..., :3, [-1]][:, [index], ...] #Final positions #(so, atom, 3, 1)
+        d = self.world_matrices[..., :3, [-1]] - p #Displacement
+        r = np.linalg.norm(d, axis = -2, keepdims = True) #Distance
+        o = np.einsum("abcd,bcd->abd", self.transformed_world_matrices[:, [index], :3, :3], self.world_matrices[:, :3, :3]) #orientation per axes (via dot product along dimension 2)(so, atom, [px,py,pz])
+        o = np.insert(o, 0, 1, axis = -1)#orientation per axes (so, atom, [s,px,py,pz])
+        landing = (r < 0.1).astype(int) #0 where the atom does not land. 1 where it does
+        proj = np.einsum("abcd,abe->abcde",landing,o).squeeze() #(so, atom, [s,px,py,pz])
+        return proj
 
+    def find_projection(self, index = 0):
+        proj = self.find_landing_spot_projection(index) #(so, atom, orbitals)
+        SALCS = np.einsum("ba,acd->bcd",self.get_expanded_characters, proj) #(Irrep, atom, orbital)
+        SALCS = np.round(SALCS, 3)
+        result = {}
+        for ii, irrep in enumerate(self.pg.irreps):
+            result[irrep] = {}
+            for io, orbital in enumerate("s px py pz".split()):
+                if sum(np.abs(SALCS[ii,:,io])) < .1:
+                    continue
+                result[irrep][orbital] = SALCS[ii,:,io]
+        return result
 
 
 if __name__ == "__main__":
     file = os.path.join("molecule_data", "data_benzene.json")
     pg = PointGroup("D6h")
     benzene = SObject.from_datafile(file)
+    p = benzene.find_projection(0)
+    for a in p:
+        if "s" in p[a]:
+            print(a)
+            print(p[a])
     # a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
     # a = np.array([f"${e}$" for e in a]).reshape(-1, 13)
     # print(a.tolist())
