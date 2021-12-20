@@ -110,109 +110,12 @@ class PointGroup:
         ending_orbital = np.argmin(distance)
         return ending_orbital
 
-    def find_landnig_spots(self, orbitals, matrices, orbital_index = 0):
-        final_orbitals = np.einsum("abc,acd->abd", matrices.reshape(-1, 4, 4), orbitals[[orbital_index], ...])
-
-        ## To be continued
-
-    def find_projected_p_coeffs(self, orbital, matrix):
-        mask = np.eye(4, dtype = bool)
-        mask[3, 3] = False
-        return (orbital.T@matrix)[mask]
-
-    def count_remaining_p_orbitals(self, orbitals, matrix):
-        transformed_orbitals = np.einsum('ij,kjl->kil',matrix, orbitals)
-        error = np.linalg.norm(transformed_orbitals[:, :3, 3] - orbitals[:, :3, 3], axis = 1)
-        projected = np.einsum('ij,kil->kjl',matrix, orbitals)
-        projected[error>1e-1]*=0
-        mask = np.eye(4, dtype = bool)
-        mask[3, 3] = False
-        mask = np.tile(mask, (len(projected), 1, 1))
-        s = projected[mask].sum()
-        return int(round(s, 0)) if np.abs(float(s) - round(s, 0)) < error.max()/1000 else s #Easier to read afterwards
-
-    def count_remaining_s_orbitals(self, orbitals, matrix):
-        new_positions = (matrix[:3, :3]@orbitals[:, :3, 3].T).T
-        distance = np.linalg.norm(orbitals[:,:3,3] - new_positions, axis = 1, keepdims = False)
-        return np.ones(len(new_positions))[distance<1e-1].sum()
-
     def create_orbitals(self, vertices, orientations = [None]):
         orbitals = np.tile(np.eye(4), (len(vertices), 1, 1))
         for i, v in enumerate(vertices):
             orbitals[i, :3, 3] = v[:3]
             orbitals[i, :3, :3] = np.eye(3) if orientations[0] == None else orientations[i]
         return orbitals
-
-    def find_reducible_representation(self, orbitals):
-        """
-            Orbitals must be 4x4 matrices"""
-        traces = np.zeros(len(self.matrices))
-        tracep = np.zeros(len(self.matrices))
-        for ci, c in enumerate(self.matrices): #For each  conjugacy class
-            for ti, t in enumerate(c): #For each transformation in that conjugacy class
-                traces[ci] += self.count_remaining_s_orbitals(orbitals, t)
-                tracep[ci] += self.count_remaining_p_orbitals(orbitals, t)
-        return traces, tracep
-
-    def apply_projection_operator(self, orbitals, orbital_index = 0):
-        projx = np.zeros((len(orbitals), len(self.conjugacy_counts)))
-        projy = projx.copy()
-        projz = projx.copy()
-        projs = projx.copy()
-
-        proj = [projx, projy, projz]
-        for cci, cc in enumerate(self.matrices): #For each conjugacy class
-            for t in cc: #For each transformation in that cclss
-                landing = self.find_landing_spot(orbitals, t, orbital_index)
-                coeffs = self.find_projected_p_coeffs(orbitals[orbital_index], t)
-                projs[landing, cci] += 1 # For the s orbital
-                for i in range(3):
-                    proj[i][landing, cci] += coeffs[i]
-
-        return projs, projx, projy, projz
-
-    def print_salcs(self, orbitals, trace, orbital_index = 0):
-        projs, projx, projy, projz = self.apply_projection_operator(orbitals, orbital_index)
-        SALCS = {}
-        labels = []
-        dot = (trace*self.characters).sum(axis = 1)/self.h
-        for ci, c in enumerate(self.characters):
-            if dot[ci] < 0.1:
-                continue
-            salcs = (projs*c).sum(axis = 1)
-            salcx = (projx*c).sum(axis = 1)
-            salcy = (projy*c).sum(axis = 1)
-            salcz = (projz*c).sum(axis = 1)
-            if "E" in self.irreps[ci]:
-                f = self.linear_independenceE
-            elif "T" in self.irreps[ci]:
-                f = self.linear_independenceT
-            elif "G" in self.irreps[ci]:
-                f = self.linear_independenceG
-            elif "H" in self.irreps[ci]:
-                f = self.linear_independenceH
-            else:
-                print(self.irreps[ci])
-                SALCS[self.irreps[ci]] = {}
-                for i, salc in enumerate([salcs, salcx, salcy, salcz]):
-                    label = "2s x y z".split()[i]
-                    salc = np.around(salc, 6).tolist()
-                    SALCS[self.irreps[ci]][label] = salc
-                    print(label, salc)
-                    print()
-                continue
-            salcs_and_labels = [f(s, self.irreps[ci], orbitals, self.matrices[1]) for s in [salcs,salcx,salcy,salcz]]
-            print(salcs_and_labels[0][0])
-            for i in range(len(salcs_and_labels[0][0])):
-                print(salcs_and_labels[0][0][i])
-                SALCS[salcs_and_labels[0][0][i]] = {}
-                for j in range(4):
-                    label = "2s x y z".split()[j]
-                    salc = np.around(salcs_and_labels[j][1][i], 6).tolist()
-                    SALCS[salcs_and_labels[0][0][i]][label] = salc
-                    print(label,salc)
-                    print()
-        return SALCS
 
     def make_rotation(self, normal, angle): #This and the following "tranformation functions" generate 4x4 matrices that can be appplied to the orbitals
         if len(normal.shape) == 1:
