@@ -610,11 +610,13 @@ class SObject:
                 if sum(np.abs(SALCS[ii,:,io])) < .1:
                     continue
                 result[irrep][orbital] = SALCS[ii,:,io]
+            if len(result[irrep]) == 0:
+                del result[irrep]
         return result
 
 
 if __name__ == "__main__":
-    file = os.path.join("molecule_data", "data_benzene.json")
+    file = os.path.join("molecule_data", "data_fullerene.json")
     pg = PointGroup("D6h")
     benzene = SObject.from_datafile(file)
     p = benzene.find_projection(0)
