@@ -202,7 +202,6 @@ def binatodeci(binary):
 
 
 
-@jit(nopython = True, cache = True, nogil=True)
 def marching_cubes(field, value, shape, xyz):
     lookuptable = np.array([[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
     [0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],

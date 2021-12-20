@@ -360,7 +360,7 @@ class SObject:
                 irrep = dicts[j+1][d]
                 for label in irrep: #Group coefficients by label for easy access
                     d0[d][label] = np.vstack((d0[d][label], irrep[label]))
-            for label in irrep: #Apply gram smidt orthogonality
+            for label in irrep: #Apply gram smidt orthogonality after all vectors are added
                 d0[d][label] = np.round(self.pg.GramS(d0[d][label]),3)
         return d0
 
