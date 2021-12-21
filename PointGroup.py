@@ -338,20 +338,20 @@ class SObject:
         degeneracy = {"A":1,"B":1,"E":2,"T":3,"G":4,"H":5}
         letters = [re.search(r"[ABETGH]",a).group() for a in self.pg.irreps]
         itterations = list(map(lambda a: degeneracy[a], letters))
-        n = max(itterations)
+        n = max(itterations) + 2
         dicts = []
         w = self.world_matrices.copy()
         for i in range(n):
             dicts.append(self.find_projection(index))
-            self.world_matrices = np.einsum("bc,acd->abd",self.expanded_so_matrices[i+1], w)
+            self.world_matrices = np.einsum("bc,acd->abd",self.expanded_so_matrices[i+2], w)
         return dicts
 
-    def filter_SALCS(self, dicts):
+    def filter_SALCS(self, dicts: list) -> dict:
         """ Removes repeated salcs and finds linearly independent combinations where needed"""
         if len(dicts) == 1:
             return dicts[0]
         d0 = dicts[0]
-        degeneracy = {"A":1,"B":1,"E":2,"T":3,"G":4,"H":5}
+        degeneracy = {"A":1,"B":1,"E":4,"T":5,"G":6,"H":7} # Extra degeneracy added for safety
         letters = [re.search(r"[ABETGH]",a).group() for a in self.pg.irreps]
         itterations = list(map(lambda a: degeneracy[a], letters))
         degenerates = np.array(self.pg.irreps)[np.array(itterations) > 1]
@@ -361,18 +361,20 @@ class SObject:
                 irrep = dicts[j+1][d]
                 for label in irrep: #Group coefficients by label for easy access
                     d0[d][label] = np.vstack((d0[d][label], irrep[label]))
-            for label in irrep: #Apply gram smidt orthogonality after all vectors are added
+            for label in irrep: #Apply gram smidt orthogonality after all vectors are added and remove non-orthogonals
                 d0[d][label] = np.round(self.pg.GramS(d0[d][label]),3)
+                d0[d][label] = d0[d][label][np.linalg.norm(d0[d][label], axis=1) > 0.1]
         return d0
 
     def get_SALCS(self, index: int = 0) -> dict:
         return self.filter_SALCS(self.find_SALCS(index))
 
 if __name__ == "__main__":
-    file = os.path.join("molecule_data", "data_benzene.json")
+    file = os.path.join("molecule_data", "data_dodecahedrane.json")
     pg = PointGroup("D6h")
     benzene = SObject.from_file(file)
     SALC = benzene.get_SALCS(0)
+    # print(SALC)
     # a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
     # a = np.array([f"${e}$" for e in a]).reshape(-1, 13)
     # print(a.tolist())
