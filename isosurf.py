@@ -18,7 +18,6 @@ class Isosurface(Bobject):
             kwargs["name"] = "Orbital"
             self.name = kwargs["name"]
         super().__init__(*args, **kwargs)
-        self.collection = self.make_collection(parent = self.parent_collection, name = self.name)
 
     @staticmethod
     def bezier(start, finish, n = 30) -> np.ndarray:
@@ -133,6 +132,8 @@ class Isosurface(Bobject):
         new_mesh.from_pydata((verts*scale+offset).tolist(), [], faces.tolist())
         new_mesh.update()
         new_object = bpy.data.objects.new('Orbital', new_mesh)
+        if self.collection is None:
+            self.collection = self.make_collection(name = self.name)
         self.link_obj(new_object, self.collection)
         self.obj = new_object
         self.set_active(new_object)
@@ -201,8 +202,6 @@ class AtomicOrbital(Isosurface):
 
     @property
     def field_func(self):
-        print(self.coeff)
-        print(self._field_func)
         return lambda *args, **kwargs: self.coeff*self._field_func(*args, **kwargs)
 
     @field_func.setter
@@ -294,7 +293,6 @@ class AtomicOrbital(Isosurface):
 
 
     def update_mesh(self, frame, transition):
-        print("THis update mesh is being called")
         limits = transition["frames"]
         duration = np.diff(limits)[0]
         if frame not in range(*[limits[0], limits[1]-1]):
@@ -344,6 +342,7 @@ class MolecularOrbital(AtomicOrbital):
             ]
         self.scalarfield = np.array([
             a.scalarfield for a in self.atomic_orbitals]).sum(0)
+        self.collection = self.atomic_orbitals[0].collection
         self.isovalue = self.iso_find2(r, field_func, ratios = LC, atoms = atom_positions)
 
 def apply_field(grid, orbital_func):

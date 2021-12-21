@@ -160,6 +160,7 @@ class Molecule(Atom):
         self.orbital_matrices = np.tile(np.eye(4), (len(self.position), 1, 1)) #Matrices of molecular orbitals
         self.orbital_names = [None for i in range(len(self.position))]
         self.orbital_kinds = [None for i in range(len(self.position))]
+        self.molecular_orbitals = []
 
 
     def translate(self, v):
@@ -525,14 +526,15 @@ class Molecule(Atom):
         material_copy: boolean specifying if every orbital will have it's own instance of the material
         join: boolean specifying if both positive and negative lobes are joined
         """
-        orbs = MolecularOrbital(r, n, field_func, position = np.zeros(3), atom_positions = self.position, LC = SALC)
+        orbs = MolecularOrbital(r, n, field_func, position = np.zeros(3), atom_positions = self.position, LC = SALC, parent_collection = self.collection, collection = self.orbital_collection)
         orbs.generate_isosurface(**kwargs)
         if center_origin:
             self.set_origin(orbs.obj)
         self.meshes.append(orbs.obj)
+        self.molecular_orbitals.append(orbs)
         return orbs
 
-    def make_atomic_orbital(self, position, orbital_func, r, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, **kwargs):
+    def make_atomic_orbital(self, position, orbital_func, r, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, collection = None, **kwargs):
         """
             Makes an atomic orbital at specified position
             if atom_index is provided, data is incorporated into the object and it can be animated.
@@ -540,13 +542,13 @@ class Molecule(Atom):
         orb = AtomicOrbital(
             r = r, n = n, isovalue = None,
             position = [0, 0, 0], coeff = 1,
-            field_func = orbital_func, parent_collection = self.orbital_collection)
-        orb = orb.generate_isosurface(material_copy = False)
-        orb.location = position
+            field_func = orbital_func, parent_collection = self.collection, collection = self.orbital_collection)
+        mesh = orb.generate_isosurface(material_copy = False)
+        mesh.location = position
         if type(atom_index) == int:
-            self.set_parent(self.atom_meshes[atom_index], orb)
-            self.orbital_meshes[atom_index] = orb
-            self.meshes.append(orb)
+            self.set_parent(self.atom_meshes[atom_index], mesh)
+            self.orbital_meshes[atom_index] = mesh
+            self.meshes.append(mesh)
             self.orbital_names[atom_index] = "Not None"
         return orb
 
@@ -559,14 +561,17 @@ class Molecule(Atom):
         orbs = []
         for i, p in enumerate(self.position):
             if coeffs[i] == 0: continue
-            orb = self.make_atomic_orbital(p, orbital_func, r, n, atom_index = i, MO = False, **kwargs)
-            orb.scale = [scale*coeffs[i]/abs(coeffs[i])]*3
-            self.set_active(orb)
+            orb = self.make_atomic_orbital(p, orbital_func, r, n, atom_index = i, MO = False, parent_collection = self.orbital_collection, collection = self.collection, **kwargs)
+            mesh = orb.obj
+            print(orb.collection)
+            print(orb.parent_collection)
+            mesh.scale = [scale*coeffs[i]/abs(coeffs[i])]*3
+            self.set_active(mesh)
             bpy.ops.object.transform_apply(location = False, rotation = False, scale = True)
-            orbs.append(orb)
+            orbs.append(mesh)
         return orbs
 
-    def erase_MO(self, MO): #MO is the mesh of the orbital
+    def erase_AO(self, MO): #MO is the mesh of the orbital
         index = self.orbital_meshes.index(MO)
         self.orbital_meshes[index] = None
         self.orbital_names[index] = None
@@ -576,9 +581,17 @@ class Molecule(Atom):
         self.meshes.pop(index)
         bpy.data.objects.remove(MO, do_unlink=True)
 
-    def erase_MOS(self):
+    def erase_AOS(self):
         for MO in [o for o in self.orbital_meshes if o]: #Without this list comprehension the loop breaks prematurely!
-            self.erase_MO(MO)
+            self.erase_AO(MO)
+
+    def erase_MO(self, MO):
+        self.molecular_orbitals.pop(self.molecular_orbitals.index(MO))
+        MO.erase()
+
+    def erase_MOS(self):
+        [self.erase_MO(mo) for mo in self.molecular_orbitals]
+
 
     def erase(self):
         for obj in self.meshes+self.mules:

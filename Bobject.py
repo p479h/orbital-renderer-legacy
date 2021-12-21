@@ -1,7 +1,7 @@
 from all_imports import *
 
 class Bobject: #Blender object
-    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob", parent_collection = None):
+    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob", parent_collection = None, collection = None):
         print("Object is ", obj)
         self.obj = obj #Blender object that obj refers to
         self.parent = None #
@@ -12,6 +12,15 @@ class Bobject: #Blender object
         self.updaters = []
         self.transitions = []
         self.parent_collection = parent_collection
+        self.collection = collection
+        if obj:
+            self.assign_collection(obj)
+
+    def assign_collection(self, obj):
+        self.unlink_obj(obj)
+        self.link_obj(obj, collection = self.collection)
+        if not self.parent_collection is None:
+            self.set_collection_parent(self.parent_collection, self.collection)
 
     def add_updater(self, func):
         """
@@ -208,6 +217,8 @@ class Bobject: #Blender object
 
     @classmethod
     def set_active(cls, obj):
+        if type(obj) == Bobject: #We can now use it for an object that is not a BlenderObject
+            obj = obj.obj
         cls.select(obj)
         bpy.context.view_layer.objects.active = obj
 
@@ -417,7 +428,6 @@ class Bobject: #Blender object
 
     def erase(self):
         self.delete_obj(self.obj, delete_collection = True)
-
 
 
     @classmethod
