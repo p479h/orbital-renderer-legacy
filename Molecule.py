@@ -4,6 +4,7 @@ from Bobject import *
 from FileManager import FileManager as fm
 from PointGroup import *
 import wavefunctions
+from BText import *
 
 
 def load_atoms_data():
@@ -154,15 +155,42 @@ class Molecule(Atom):
         self.bond_collection = self.make_collection(self.collection, "bonds_"+name) #If we don't add "name", collections with the same name will be created. Since blender does not allow for this, we end up re-referencing exisint collecitons. Not GUT for multiple molecules
         self.atom_collection = self.make_collection(self.collection, "atoms_"+name)
         self.orbital_collection=  self.make_collection(self.collection, "orbitals_"+name)
+        self.label_collection = self.make_collection(self.collection, "labels_"+name)
         self.outline_materials = [] #Materials used for cartoonish style
         self.orbital_indices = np.array([0 for i in range(len(self.position))]).astype(bool)
         self.orbital_meshes = [None for i in range(len(self.position))] #Meshes of molecular orbitals
         self.orbital_matrices = np.tile(np.eye(4), (len(self.position), 1, 1)) #Matrices of molecular orbitals
         self.orbital_names = [None for i in range(len(self.position))]
         self.orbital_kinds = [None for i in range(len(self.position))]
+        self.labels = []
         self.molecular_orbitals = []
         self.pg = pg
 
+    def add_labels(self, atoms: np.ndarray = [], offset: np.ndarray = np.zeros(3), labels: list = [], *args, **kwargs)->None:
+        """
+            Adds a label to each atom. Atoms is a numpy array with 1's where the label must be placed
+            atoms: np.ndarray with 1s and 0s
+            offset: np.ndarray with offset from atoms position
+            labels: iteratble of str
+            """
+        if len(labels) == 0:
+            labels = np.arange(len(self.names), dtype = np.int32).astype(str).tolist()
+
+        if len(atoms) == 0:
+            atoms = np.ones(len(self.names))
+
+        for i, (a, l) in enumerate(zip(atoms, labels)):
+            if a != 1:
+                continue
+            self.labels.append(
+                BText(text = l, location = self.position[i], offset = offset, collection = self.label_collection, **kwargs)
+            )
+            self.labels[-1].draw()
+            #self.labels[-1].align_to_camera()
+
+    def delete_label(self, label, *args, **kwargs):
+        index = self.labels.index(label)
+        self.labels.pop(index).erase(*args, **kwargs)
 
     def translate(self, v):
         """
@@ -497,15 +525,20 @@ class Molecule(Atom):
         material_copy: boolean specifying if every orbital will have it's own instance of the material
         join: boolean specifying if both positive and negative lobes are joined
         """
+        if type(SALC) in (int, float):
+            SALC = np.array([SALC]*len(self.position))
+        max_distance = np.linalg.norm(self.position[np.abs(SALC)>1e-6], axis = -1).max()
+        r = max_distance + r
         orbs = MolecularOrbital(r, n, field_func, position = np.zeros(3), atom_positions = self.position, LC = SALC, parent_collection = self.collection, collection = self.orbital_collection)
         orbs.generate_isosurface(**kwargs)
         if center_origin:
             self.set_origin(orbs.obj)
+        self.set_parent(self.mule, orbs.obj)
         self.meshes.append(orbs.obj)
         self.molecular_orbitals.append(orbs)
         return orbs
 
-    def make_atomic_orbital(self, position, orbital_func, r, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, collection = None, **kwargs):
+    def make_atomic_orbital(self, position, field_func=wavefunctions.pz, r = 2, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, collection = None, **kwargs):
         """
             Makes an atomic orbital at specified position
             if atom_index is provided, data is incorporated into the object and it can be animated.
@@ -513,7 +546,7 @@ class Molecule(Atom):
         orb = AtomicOrbital(
             r = r, n = n, isovalue = None,
             position = [0, 0, 0], coeff = 1,
-            field_func = orbital_func, parent_collection = self.collection, collection = self.orbital_collection)
+            field_func = field_func, parent_collection = self.collection, collection = self.orbital_collection)
         mesh = orb.generate_isosurface(material_copy = False)
         mesh.location = position
         if type(atom_index) == int:
@@ -523,20 +556,21 @@ class Molecule(Atom):
             self.orbital_names[atom_index] = "Not None"
         return orb
 
-    def make_atomic_orbitals(self, orbital_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
+    def make_atomic_orbitals(self, field_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
         """
             Adds an atomic orbital to the mesh for each orbital where coeff in coeffs != 0
             """
         if len(coeffs) == 0:
             coeffs = np.ones(len(self.position))
+        coeffs = np.array(coeffs)
         orbs = []
+        coeffs = coeffs/coeffs.max()
         for i, p in enumerate(self.position):
             if coeffs[i] == 0: continue
-            orb = self.make_atomic_orbital(p, orbital_func, r, n, atom_index = i, MO = False, parent_collection = self.orbital_collection, collection = self.collection, **kwargs)
+            orb = self.make_atomic_orbital(p,
+            lambda *args, **kwargs: coeffs[i]*field_func(*args, **kwargs), r, n, atom_index = i, MO = False, parent_collection = self.orbital_collection, collection = self.collection, **kwargs)
             mesh = orb.obj
-            print(orb.collection)
-            print(orb.parent_collection)
-            mesh.scale = [scale*coeffs[i]/abs(coeffs[i])]*3
+            mesh.scale = [scale*abs(coeffs[i])]*3
             self.set_active(mesh)
             bpy.ops.object.transform_apply(location = False, rotation = False, scale = True)
             orbs.append(mesh)

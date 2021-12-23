@@ -2,7 +2,9 @@ from all_imports import *
 
 class Bobject: #Blender object
     instances = []
-    def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob", parent_collection = None, collection = None):
+    def __init__(self, obj = None, pause = 20, transition = 59,
+     short_pause = 1, name = "bob", parent_collection = None,
+     collection = None):
         print("Object is ", obj)
         self.obj = obj #Blender object that obj refers to
         self.parent = None #
@@ -434,8 +436,8 @@ class Bobject: #Blender object
                     if len(c.objects) == 0:
                         bpy.data.collections.remove(c)
 
-    def erase(self):
-        self.delete_obj(self.obj, delete_collection = True)
+    def erase(self, delete_collection = True):
+        self.delete_obj(self.obj, delete_collection = delete_collection)
 
 
     @classmethod

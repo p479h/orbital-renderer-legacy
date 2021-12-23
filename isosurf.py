@@ -58,12 +58,12 @@ class Isosurface(Bobject):
 
 
     @staticmethod
-    def apply_field(grid, molecule, orbital_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
+    def apply_field(grid, molecule, field_func, molecule_mat = np.eye(3), inv = [], SALC = [], orbital_orientation_function = lambda a: np.eye(3)) -> np.ndarray:
         """
         xyz: coordinates where field is evaluated 4d np.ndarray
         molecule: coordinates of atoms 2d np.ndarray
         mat: matrix applied to the molecule (such as a rotation)
-        orbital_func: function to be applied to the molecule to generate field
+        field_func: function to be applied to the molecule to generate field
         orbital_orientation_function is a function which takes the position of each atom as an argument and returns a corresponding linear transformation for its orbital to be applied to it's field
 
         returns 4d array with the following indices (atom, x, y, z, xyz) -> field value at cooresponding index in xyz
@@ -80,7 +80,7 @@ class Isosurface(Bobject):
         dist = np.linalg.norm(d, axis = 4)
         phi = np.arctan2(d[..., 1], d[..., 0])
         theta = np.arctan2(np.linalg.norm(d[..., :2], axis = 4), d[..., 2])
-        return orbital_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
+        return field_func(dist, theta, phi)*(SALC/np.linalg.norm(SALC)).reshape(-1, 1, 1, 1)
 
     @staticmethod
     def generate_grid(r: float, n: int) -> np.ndarray:
@@ -345,8 +345,8 @@ class MolecularOrbital(AtomicOrbital):
         self.collection = self.atomic_orbitals[0].collection
         self.isovalue = self.iso_find2(r, field_func, ratios = LC, atoms = atom_positions)
 
-def apply_field(grid, orbital_func):
+def apply_field(grid, field_func):
     dist = np.linalg.norm(grid, axis = -1)
     phi = np.arctan2(grid[..., 1], grid[..., 0])
     theta = np.arctan2(np.linalg.norm(grid[..., :2], axis = -1), grid[..., 2])
-    return orbital_func(dist, theta, phi)
+    return field_func(dist, theta, phi)
