@@ -1,6 +1,7 @@
 from all_imports import *
 
 class Bobject: #Blender object
+    instances = []
     def __init__(self, obj = None, pause = 20, transition = 59, short_pause = 1, name = "bob", parent_collection = None, collection = None):
         print("Object is ", obj)
         self.obj = obj #Blender object that obj refers to
@@ -15,9 +16,15 @@ class Bobject: #Blender object
         self.collection = collection
         if obj:
             self.assign_collection(obj)
+        self.instances.append(self)
+
+    def find_camera(self):
+        return bpy.data.objects.get("Camera")
 
     def assign_collection(self, obj):
         self.unlink_obj(obj)
+        if self.collection is None:
+            self.collection = bpy.data.collections[0] #Main collection
         self.link_obj(obj, collection = self.collection)
         if not self.parent_collection is None:
             self.set_collection_parent(self.parent_collection, self.collection)
@@ -250,7 +257,7 @@ class Bobject: #Blender object
 
     @classmethod
     def skip_frames(cls, n):
-        self.set_frame(cls.get_current_frame()+n)
+        cls.set_frame(cls.get_current_frame()+n)
 
     @classmethod
     def wait(cls, n):
@@ -489,9 +496,10 @@ class Bobject: #Blender object
         arguments are the same as render_image"""
         if frames is None:
             frames = [0, self.get_current_frame()]
+            if frames[0] == frames[1]:
+                frames[1] = bpy.data.scenes["Scene"].frame_end
         for frame in range(*frames):
-            if len(self.updaters) > 0:
-                [u(frame) for u in self.updaters]
+            [u(frame) for o in self.instances for u in o.updaters]
             kwargs["frame"] = frame
             self.render_image(*args, **kwargs)
 
@@ -501,6 +509,7 @@ class Bobject: #Blender object
             name = str(frame).zfill(4)
         if not directory:
             directory = "."
+        [u(frame) for o in self.instances for u in o.updaters]
         bpy.data.scenes["Scene"].render.image_settings.file_format = file_format
         bpy.context.scene.render.filepath = os.path.join(os.getcwd(), directory, name)
         self.set_frame(frame)

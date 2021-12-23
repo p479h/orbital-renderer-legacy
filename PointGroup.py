@@ -264,6 +264,35 @@ class PointGroup:
             print(line.replace("\t", " & ") + "\\\\" + ( "\\hline" if i < len(lines)-1 or frame else ""))
         print("\\end{tabular}\n\\end{center}")
 
+    def latex_complete_table(self, text = None, frame = False)->None:
+        pattern = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
+        pattern = re.compile(pattern)
+        header = "\t".join(self.get_expanded_conjugacy_classes())
+        header = pattern.sub(r"$\1\2\3_{\5}\6^{\4\7}$", header).replace("sig", r"\sigma").replace("inf", r"\infty").replace("_{}", "").replace("^{}", "")
+        subbed = pattern.sub(r"$\1\2\3_{\5}\6^{\4\7}$", self.text if not text else text).replace("sig", r"\sigma").replace("inf", r"\infty").replace("_{}", "").replace("^{}", "")
+        lines = subbed.split("\n")[1:]
+        cols = len(lines[0].split('\t'))
+        print("\\begin{center}")
+        print("\\begin{tabular}{" + ("|" if frame else "") +"|".join(list("c"*(sum(self.conjugacy_counts)+1)))+ ("|" if frame else "")+"}")
+        if frame:
+            print("\\hline")
+        print(f"${self.latexify_term(self.pg_name)}$ & " + header.replace("\t", " & "))
+        print("\\\\" + "\\hline")
+        for i, line in enumerate(lines):
+            for ie, element in enumerate(line.split("\t")):
+                if ie == 0:
+                    print(element, " & ", end = "")
+                else:
+                    for ic, cc in enumerate(range(self.conjugacy_counts[ie-1])):
+                        print(element, end = "")
+                        if ie > 0 and ie < len(line.split("\t"))-1:
+                            print(" & ", end = "")
+                        elif (ie == len(line.split("\t"))-1) and ic < self.conjugacy_counts[ie-1]-1:
+                            print(" & ", end = "")
+
+            print("\\\\" + ( "\\hline" if i < len(lines)-1 or frame else ""))
+        print("\\end{tabular}\n\\end{center}")
+
 
     def get_expanded_conjugacy_classes(self)->list:
         """ Brings all transformations individually e.g. E C C C instead of E 3C"""
@@ -371,11 +400,13 @@ class SObject:
 
 if __name__ == "__main__":
     file = os.path.join("molecule_data", "data_dodecahedrane.json")
-    pg = PointGroup("D6h")
+    pg = PointGroup("D3h")
     benzene = SObject.from_file(file)
     SALC = benzene.get_SALCS(0)
     # print(SALC)
     # a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
     # a = np.array([f"${e}$" for e in a]).reshape(-1, 13)
     # print(a.tolist())
-    # pg.latex_table()
+
+    pg.latex_complete_table(frame = True)
+    print(pg.irreps)
