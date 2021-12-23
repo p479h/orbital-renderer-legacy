@@ -1070,7 +1070,7 @@ class Molecule(Atom):
                 self.add_material_transition("emission", mesh, t0 + t2, t2, (0, 0, 0, 1), (.2, .2, .2, 1))
                 self.add_material_transition("emission", mesh, tf - t2, t2,(.2, .2, .2, 1), (0, 0, 0, 1))
 
-                #Making them SMOL
+                #Making them SMOL(small)
                 self.add_transition("scale", mesh, t0 + t2, t2, [1]*3, [scales[i]]*3)
                 self.add_transition("scale", mesh, tf - t2, t2, [scales[i]]*3, [1]*3)
 

@@ -27,7 +27,7 @@ class BText(Bobject): #Blender Text
         if self.obj:
             self.obj.data.body = text
 
-    def align_to_camera(self, frame = None): #The second argument is needed for the update function caller 
+    def align_to_camera(self, frame = None): #The second argument is needed for the update function caller
         if not self.obj: return
         camera = self.find_camera() #Method belonging to Bobject
         loc, rot, cale = camera.matrix_world.decompose()

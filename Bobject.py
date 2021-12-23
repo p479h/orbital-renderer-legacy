@@ -352,7 +352,8 @@ class Bobject: #Blender object
         color_mode: str = "RGBA",
         background_transparent: bool = True,
         focal_length: float = 75,
-        camera_matrix = [[ 0.707, -0.395,  0.586,  8.965],[ 0.707,  0.395, -0.586, -8.982],[ 0.   ,  0.829,  0.559,  8.75 ],[ 0.   ,  0.   ,  0.   ,  1.   ]]
+        camera_matrix = [[ 0.707, -0.395,  0.586,  8.965],[ 0.707,  0.395, -0.586, -8.982],[ 0.   ,  0.829,  0.559,  8.75 ],[ 0.   ,  0.   ,  0.   ,  1.   ]],
+        *args, **kwargs #Args and kwargs lets you use **molecule.data as an argument
         ) -> None:
         bpy.data.scenes["Scene"].render.film_transparent = background_transparent
         bpy.context.scene.render.resolution_x = resolution_xy[0]
