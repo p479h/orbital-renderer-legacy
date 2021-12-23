@@ -92,7 +92,7 @@ class Isosurface(Bobject):
         grids = [i[..., None] for i in grids]
         return np.concatenate(grids, axis = 3).astype(np.float32)
 
-    def make_orbital_material(self, sign, copy = True, ivo = True):
+    def make_orbital_material(self, sign, copy = True, ivo = False):
         A = {"p":"positive", "n": "negative"}[sign]
         try:
             bpy.data.materials.get(A)#So we can use this class without being in

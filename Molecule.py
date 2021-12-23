@@ -133,8 +133,8 @@ class Molecule(Atom):
         Here each atom becomes associated to an index in the arrays with info about the molecule"""
 
     def __init__(self, atoms, radius_factor = 1,connections = None, name = None,
-                 prettify_radii = True, collection = None, orders = []):
-        super().__init__()
+                 prettify_radii = True, collection = None, orders = [], pg = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.atoms = atoms
         self.prettify_radii = prettify_radii #If turned off, the actuall atomic radii will be used
         self.position = self.get_positions(atoms) #Note how we use the same property name for Atoms and Molecule. This is because then we can rely on the "setters" already defined in Atoms.
@@ -161,6 +161,7 @@ class Molecule(Atom):
         self.orbital_names = [None for i in range(len(self.position))]
         self.orbital_kinds = [None for i in range(len(self.position))]
         self.molecular_orbitals = []
+        self.pg = pg
 
 
     def translate(self, v):
@@ -486,36 +487,6 @@ class Molecule(Atom):
         self.set_origin(new_object)
         return new_object
 
-    def generate_isosurface(self, scalarfield, grid, isovalue, material_copy = True, center_origin = True):
-        """
-        Applies the marching cubes algorithm to scalarfield with many atoms' vector fields added
-        scalarfield: values of wavefunction in the corresponding places in the grid
-        grid: (natoms, n, n, n, 3) array with the positions where the wavefunction is evaluated
-        isovalue: float with the value where the isosurface is constructed
-        material_copy: boolean specifying if every orbital will have it's own instance of the material
-        """
-        self.deselect_all()
-        pair = []
-        r = grid.max()
-        n = len(grid)
-        spacing = np.full(3, r*2/(n-1))
-        for sign, val in zip(["p", "n"],[1, -1]):
-            isovalue*=val
-            try:
-                vertices, faces, normals, values = measure.marching_cubes(scalarfield, level = isovalue, spacing = spacing)
-            except: #If the isovalue is too high/low to begin with:
-                vertices = np.array([[0, 0, 0]])
-                normals = np.array([])
-                faces = np.array([])
-                values = np.array([])
-            orb = self.add_mesh(vertices - r, faces, sign)
-            orb.active_material = self.make_orbital_material(sign, copy = material_copy)
-            pair.append(orb)
-        self.select(*pair)
-        self.set_active(orb)
-        bpy.ops.object.join()
-        self.set_origin(orb)
-        return orb
 
     def make_molecular_orbital(self, r, n, SALC = 1, field_func=wavefunctions.pz, material_copy = True, center_origin = True, **kwargs):
         """
@@ -638,13 +609,19 @@ class Molecule(Atom):
     @classmethod
     def from_file(cls, path, *args, **kwargs):
         if "name" not in kwargs:
-            kwargs["name"] = os.path.splitext(os.path.basename(path))[0]
-        if path.endswith(".xyz"):
-            return cls.from_xyz_file(path, *args, **kwargs)
-        elif path.endswith(".mol"):
-            return cls.from_mol_file(path, *args, **kwargs)
-        elif path.endswith(".smol"):
-            return cls.from_smol_file(path, *args, **kwargs)
+            kwargs["name"] = os.path.splitext(os.path.basename(path))[0].strip("data_")
+        is_data_file = path.endswith(".json")
+        if is_data_file:
+            data = cls.load_molecule_data(path)
+            pg = PointGroup(data["point_group"])
+            path = data["xyz"]
+        extension =  os.path.splitext(os.path.basename(path))[-1].strip(".")
+        if extension in "xyz mol smol".split():
+            self = getattr(cls, f"from_{extension}_file")(path, *args, **kwargs)
+            if is_data_file:
+                self.data = data
+                self.pg = pg
+            return self
         else:
             print("File type not suported")
             print("Supported file types are: ")
