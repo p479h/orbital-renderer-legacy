@@ -202,13 +202,17 @@ class AtomicOrbital(Isosurface):
 
     def draw_mpl(self, *args, **kwargs):
         if not hasattr(self, "fig") or self.fig is None:
-            self.figure = plt.figure()
+            self.figure = plt.figure(figsize = (5, 4))
         if not hasattr(self, "ax") or self.ax is None:
-            self.ax = self.figure.add_subplot(111, projection = "3d")
+            self.ax = self.figure.add_axes([0, 0, 1, 1], projection = "3d")
+            self.ax.set_box_aspect([1, 1, 1])
             l = (-self.r, self.r)
             self.ax.set(
                 xlim = l, ylim = l, zlim = l
             )
+            for axis in "x y z".split():
+                getattr(self.ax, f"set_{axis}label")(f"${axis}$")
+            self.ax.set_title("$\\Psi$")
         dx = 2*self.r/(self.n-1)
         try:
             vertsp, facesp, normals, values = measure.marching_cubes(
