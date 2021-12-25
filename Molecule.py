@@ -307,7 +307,7 @@ class Molecule(Atom):
         for (i, a), p in zip(enumerate(self.atoms), v):
             if not atoms[i]:
                 continue
-            a.set_position(p)
+            a.set_location(p)
         return self
 
     def set_rotation_atoms(self, angles, axes = [0, 0, 1], atoms = None):
@@ -538,7 +538,7 @@ class Molecule(Atom):
         self.molecular_orbitals.append(orbs)
         return orbs
 
-    def make_atomic_orbital(self, position, field_func=wavefunctions.pz, r = 2, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, collection = None, **kwargs):
+    def make_atomic_orbital(self, position = np.zeros(3), field_func = wavefunctions.pz, r = 2, n = 60, orbital_orientation_function = lambda a: np.eye(3), atom_index = None, collection = None, **kwargs):
         """
             Makes an atomic orbital at specified position
             if atom_index is provided, data is incorporated into the object and it can be animated.
@@ -556,7 +556,7 @@ class Molecule(Atom):
             self.orbital_names[atom_index] = "Not None"
         return orb
 
-    def make_atomic_orbitals(self, field_func, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
+    def make_atomic_orbitals(self, field_func = wavefunctions.pz, r=4, n = 60, coeffs = [], scale = 1, **kwargs):
         """
             Adds an atomic orbital to the mesh for each orbital where coeff in coeffs != 0
             """

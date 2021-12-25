@@ -1,0 +1,1 @@
+Changing the scale, rotation and location properties

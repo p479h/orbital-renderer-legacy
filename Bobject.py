@@ -3,19 +3,25 @@ from all_imports import *
 class Bobject: #Blender object
     instances = []
     def __init__(self, obj = None, pause = 20, transition = 59,
-     short_pause = 1, name = "bob", parent_collection = None,
-     collection = None):
+     short_pause = 1, name = "bob", parent = None, parent_collection = None,
+     collection = None, location = None, rotation = None, scale = None):
         print("Object is ", obj)
         self.obj = obj #Blender object that obj refers to
-        self.parent = None #
         self.pause = pause #Pause duration between transitions in frames
         self.transition = transition #Transition duration in frames
         self.short_pause = short_pause
         self.name = name
         self.updaters = []
         self.transitions = []
+        self.mpl_obj = None #Matplotlib used for orbitals
+        self.ax = None
+        self.fig = None
         self.parent_collection = parent_collection
         self.collection = collection
+        self._parent = parent
+        self._rotation = rotation
+        self._location = location
+        self._scale = location
         if obj:
             self.assign_collection(obj)
         self.instances.append(self)
@@ -39,12 +45,11 @@ class Bobject: #Blender object
 
     @property
     def parent(self):
-        if self.obj:
-            return self.obj.parent
-        return None
+        return self._parent
 
     @parent.setter
     def parent(self, parent):
+        self._parent = parent
         if self.obj:
             self.obj.parent = parent
 
@@ -141,11 +146,9 @@ class Bobject: #Blender object
             obj.rotation_euler = mathutils.Euler(angle, rmode)
         return obj
 
-    def set_position(self, v):
-        return self.set_position_obj(self.obj, v)
-
     def set_location(self, v):
-        return self.set_position(self,v)
+        self._position = np.array(v)
+        return self.set_position_obj(self.obj, v)
 
     def set_scale(self, v):
         return self.set_scale_obj(self.obj, v)
@@ -437,7 +440,10 @@ class Bobject: #Blender object
                         bpy.data.collections.remove(c)
 
     def erase(self, delete_collection = True):
-        self.delete_obj(self.obj, delete_collection = delete_collection)
+        if not self.obj is None:
+            self.delete_obj(self.obj, delete_collection = delete_collection)
+        if not self.mpl_obj is None:
+            self.mpl_obj.remove()
 
 
     @classmethod
@@ -517,3 +523,6 @@ class Bobject: #Blender object
         bpy.context.scene.render.filepath = os.path.join(os.getcwd(), directory, name)
         self.set_frame(frame)
         bpy.ops.render.render(use_viewport = True, write_still=True)
+
+if __name__ == "__main__":
+    Bobject()

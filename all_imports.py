@@ -1,17 +1,16 @@
-try:
+try: #We are inside blender
     import mathutils
-except:
-    print("Could not import mathutuils")
-try:
     import bpy
-except:
-    print("Could not import bpy")
+except:#We are on matplotlib
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.interpolate import interp1d
 from scipy.special import binom
 from skimage import measure
 from numba import njit
 import numpy as np
-import itertools 
+import itertools
 import importlib
 import json
 import time

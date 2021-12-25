@@ -200,6 +200,37 @@ class AtomicOrbital(Isosurface):
         self.transitions2 = False
         self.add_updater(self.updater)
 
+    def draw_mpl(self, *args, **kwargs):
+        if not hasattr(self, "fig") or self.fig is None:
+            self.figure = plt.figure()
+        if not hasattr(self, "ax") or self.ax is None:
+            self.ax = self.figure.add_subplot(111, projection = "3d")
+            l = (-self.r, self.r)
+            self.ax.set(
+                xlim = l, ylim = l, zlim = l
+            )
+        dx = 2*self.r/(self.n-1)
+        try:
+            vertsp, facesp, normals, values = measure.marching_cubes(
+                self.scalarfield, level=self.isovalue, spacing = [dx]*3)
+        except:
+            vertsp, facesp = np.array([[0, 0, 0],[0, 0, 0]]), np.array([[0, 0, 0]])
+        try:
+            vertsn, facesn, normals, values = measure.marching_cubes(
+                self.scalarfield, level=-self.isovalue, spacing = [dx]*3)
+        except:
+            vertsn, facesn = np.array([[0, 0, 0],[0, 0, 0]]), np.array([[0, 0, 0]])
+        v = np.vstack((vertsp[facesp],vertsn[facesn])) - self.r
+        self.mpl_obj = Poly3DCollection(
+                v, facecolors = ["cornflowerblue"]*len(facesp)+["tomato"]*len(facesn),
+                edgecolors = "lightgray", linewidths = .3
+            )
+        self.ax.add_collection3d(self.mpl_obj)
+
+    def update_mpl(self):
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
     @property
     def field_func(self):
         return lambda *args, **kwargs: self.coeff*self._field_func(*args, **kwargs)
@@ -302,12 +333,12 @@ class AtomicOrbital(Isosurface):
                 self.scalarfield = transition["scalarfields"][-1]
             return
         interp = transition["interpolation"]
-        fields = np.fft.fftn(transition["scalarfields"], axes = (-3, -2, -1))
+        fields = transition["scalarfields"]
         factor_start = interp(1, 0, duration)[frame-limits[0]]
         factor_end = 1-factor_start
         factors = np.array([factor_start, factor_end]).reshape(2, *[1 for i in range(fields.ndim-1)])
         self.current_isovalue = interp(*transition["isovalues"], duration)[frame-limits[0]]
-        self.current_scalarfield = np.real(np.fft.ifftn((factors*fields).sum(0), axes = (-3, -2, -1)))
+        self.current_scalarfield = (factors*fields).sum(0)
         self.delete_obj(self.obj, delete_collection = False)
         self.generate_isosurface(transition_field = True)
 
@@ -323,7 +354,7 @@ class AtomicOrbital(Isosurface):
 
 
 class MolecularOrbital(AtomicOrbital):
-    def __init__(self, r, n, field_func, position = np.zeros(3), atom_positions = np.zeros((1, 3)), LC = None, *args, **kwargs):
+    def __init__(self, r=2, n=40, field_func=wavefunctions.s1, position = np.zeros(3), atom_positions = np.zeros((1, 3)), LC = None, *args, **kwargs):
         super().__init__(r, n, field_func=field_func, position = position, *args, **kwargs)
         self.position = np.array(position)
         self.atom_positions = np.array(atom_positions)
@@ -350,3 +381,10 @@ def apply_field(grid, field_func):
     phi = np.arctan2(grid[..., 1], grid[..., 0])
     theta = np.arctan2(np.linalg.norm(grid[..., :2], axis = -1), grid[..., 2])
     return field_func(dist, theta, phi)
+
+
+if __name__ == "__main__":
+    a = AtomicOrbital(r = 25, n = 30,
+        field_func = wavefunctions.from_quantum_numbers(3, 2, 0))
+    a.draw_mpl()
+    plt.show()
