@@ -13,8 +13,10 @@ class BText(Bobject): #Blender Text
         self._scale = scale
         self._rotation = rotation
 
-        if camera_align:
-            self.add_updater(self.align_to_camera)
+        # if camera_align:
+        #     self.add_updater(self.align_to_camera)
+        #Better option is to add a constrainer
+        #self.add_constraint()
 
     def draw(self, assign_collection = True):
         self.font_curve = bpy.data.curves.new(type="FONT", name="Font Curve")
@@ -25,6 +27,9 @@ class BText(Bobject): #Blender Text
         self.set_location_obj(self.obj, self.location + self.offset)
         self.scale(self._scale)
         self.rotate(*self._rotation)
+        self.add_constraint(
+            self.find_camera(), type = "rotation" 
+        )
         return self.obj
 
     @property

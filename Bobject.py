@@ -26,6 +26,19 @@ class Bobject: #Blender object
             self.assign_collection(obj)
         self.instances.append(self)
 
+    def add_constraint(self, constrainer, type = "rotation"):
+        types = {
+            "rotation": "ROTATION",
+            "location": "LOCATION",
+            "scale": "SCALE",
+        }
+        if not self.obj:
+            return
+        self.deselect_all()
+        self.select(self.obj, constrainer)
+        self.set_active(self.obj) #Obj will follow constrainer
+        bpy.ops.object.constraint_add_with_targets(type="COPY_"+types[type])
+
     def find_camera(self):
         return bpy.data.objects.get("Camera")
 
