@@ -251,7 +251,7 @@ class PointGroup:
             return Y.T
 
     def latex_table(self, text = None, frame = False)->None:
-        pattern = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
+        pattern = r"([0-9]+)?(\(?\\?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
         pattern = re.compile(pattern)
         subbed = pattern.sub(r"$\1\2\3_{\5}\6^{\4\7}$", self.text if not text else text).replace("sig", r"\sigma").replace("inf", r"\infty").replace("_{}", "").replace("^{}", "")
         lines = subbed.split("\n")
@@ -265,7 +265,7 @@ class PointGroup:
         print("\\end{tabular}\n\\end{center}")
 
     def latex_complete_table(self, text = None, frame = False)->None:
-        pattern = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
+        pattern = r"([0-9]+)?(\(?\\?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
         pattern = re.compile(pattern)
         header = "\t".join(self.get_expanded_conjugacy_classes())
         header = pattern.sub(r"$\1\2\3_{\5}\6^{\4\7}$", header).replace("sig", r"\sigma").replace("inf", r"\infty").replace("_{}", "").replace("^{}", "")
@@ -311,6 +311,45 @@ class PointGroup:
             new_columns[:, np.arange(j, j+cc)] = col
             j+=cc
         return np.array(new_columns)
+
+    def make_expanded_manim_table(self, text = None, bold = False):
+        pattern = r"([0-9]+)?(\(?\\?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
+        pattern = re.compile(pattern)
+
+        t = text if text else self.text
+        table = self.make_manim_table(text, bold = False)
+        table_copy = self.make_manim_table(text, bold = False)
+        total_added = 0
+        for i, col_label in enumerate(table[0][1:]):
+            i = i + 1
+            col_coeff = pattern.search(col_label).group(1)
+            if not col_coeff is None:
+                c = int(col_coeff)
+                for k in range(c-1): #Looping over the columns?
+                    for li in range(len(table_copy)): #looping over the lines
+                        table_copy[li].insert(i+total_added, table_copy[li][i+total_added])
+                    total_added += 1
+        pat2 = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma|\\sigma)"
+        pat2 = re.compile(pat2)
+        for i, el in enumerate(table_copy[0]):
+            table_copy[0][i] = pat2.sub(r"\2\3", el)
+        if bold:
+            table_copy = [[r"\boldsymbol{"+element+"}" for element in line] for line in table_copy]
+        print(table_copy)
+        return table_copy
+
+
+    def make_manim_table(self, text = None, bold = False):
+        #First we make the header
+        pattern = r"([0-9]+)?(\(?)([A-Z]|Sig|sig|sigma|Sigma)('*)([a-z0-9]+|Inf|inf|infty|Infty)?(\))?([0-9]+)?"
+        pattern = re.compile(pattern)
+        subbed = pattern.sub(r"\1\2\3_{\5}\6^{\4\7}", self.text if not text else text).replace("sig", r"\sigma").replace("inf", r"\infty").replace("_{}", "").replace("^{}", "").replace("'", "\\prime")
+        lines = subbed.split("\n")
+        table = [line.split("\t") for line in lines]
+        if bold:
+            table = [[r"\boldsymbol{"+element+"}" for element in line] for line in table]
+        print(table)
+        return table
 
 class SObject:
     #Symmetry object
@@ -399,14 +438,16 @@ class SObject:
         return self.filter_SALCS(self.find_SALCS(index))
 
 if __name__ == "__main__":
-    file = os.path.join("molecule_data", "data_dodecahedrane.json")
+    file = os.path.join("molecule_data", "data_benzene.json")
     pg = PointGroup("D3h")
     benzene = SObject.from_file(file)
-    SALC = benzene.get_SALCS(0)
+    #pg.make_manim_table(bold = True)
+    pg.make_expanded_manim_table(bold = True)
+    #SALC = benzene.get_SALCS(0)
     # print(SALC)
     # a = np.array([te.split("\t") for te in pg.latexify_term(pg.text).split("\n")]).flatten().tolist()
     # a = np.array([f"${e}$" for e in a]).reshape(-1, 13)
     # print(a.tolist())
-
-    pg.latex_complete_table(frame = True)
-    print(pg.irreps)
+    #pg.latex_complete_table(frame = True)
+    # pg.latex_table(frame = True)
+    #print(pg.irreps)
