@@ -333,6 +333,12 @@ class PointGroup:
         pat2 = re.compile(pat2)
         for i, el in enumerate(table_copy[0]):
             table_copy[0][i] = pat2.sub(r"\2\3", el)
+        if not text:
+            for i, l in enumerate(table_copy):
+                for j, r in enumerate(l):
+                    if i*j == 0:
+                        continue
+                    table_copy[i][j] = str(self.characters.astype(int)[i-1, j-1])
         if bold:
             table_copy = [[r"\boldsymbol{"+element+"}" for element in line] for line in table_copy]
         print(table_copy)
@@ -439,9 +445,11 @@ class SObject:
 
 if __name__ == "__main__":
     file = os.path.join("molecule_data", "data_benzene.json")
-    pg = PointGroup("D3h")
+    pg = PointGroup("D3h_notes")
     benzene = SObject.from_file(file)
     #pg.make_manim_table(bold = True)
+    I = np.eye(3)
+    pg.characters = np.concatenate((I, -I, -I, I), axis = -1)
     pg.make_expanded_manim_table(bold = True)
     #SALC = benzene.get_SALCS(0)
     # print(SALC)
