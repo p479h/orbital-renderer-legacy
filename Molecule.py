@@ -698,8 +698,10 @@ class Molecule(Atom):
         rad = self.radius.copy()
         if prettify_radii:
             rad = self.get_smaller_radii(self.radius)
-        for a, r in zip(self.atoms, rad):
+        for i, (a, r) in enumerate(zip(self.atoms, rad)):
+            p = self.position[i]
             a._set_radius(r)
+            a._set_position(p)
             a.draw(smooth = smooth, modifier = True)
             obj = a.obj
             self.atom_meshes.append(obj)
